@@ -38,10 +38,10 @@ end
 ### Charting historical metrics
 
 Mobius tracks metrics overtime in a circular buffer and allows you to graph
-metric values over time:
+metric values over time using `Mobius.plot/0`:
 
 ```
-iex> Mobius.History.chart()
+iex> Mobius.plot()
                 Event: vm.memory.total, Metric: :last_value, Tags: %{}
 
 34355808.00 ┤
@@ -55,5 +55,21 @@ iex> Mobius.History.chart()
 33539237.82 ┤    │
 33437166.55 ┤    │
 33335095.27 ┼────╯
+```
+
+### Printing current metrics
+
+To see the current metrics you can use `Mobius.metrics_report/0`:
+
+```
+iex> Mobius.info()
+Event: vintage_net_qmi.connection.end.duration
+Tags: %{ifname: "wwan0", status: :lan}
+counter: 4
+last_value: 310000
+
+Event: vm.memory.total
+Tags: %{}
+last_value: 34674312
 ```
 

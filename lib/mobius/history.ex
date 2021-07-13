@@ -1,7 +1,5 @@
 defmodule Mobius.History do
-  @moduledoc """
-  View the historicial information about metric data
-  """
+  @moduledoc false
 
   use GenServer
 
@@ -26,25 +24,12 @@ defmodule Mobius.History do
     GenServer.call(__MODULE__, :view)
   end
 
-  @doc """
-  Print the chart of the metrics for the event
-  """
-  @spec chart() :: :ok
-  def chart() do
-    GenServer.call(__MODULE__, :chart)
-  end
-
   @impl GenServer
   def init(args) do
     history = History.init(args)
     :timer.send_interval(history.interval, self(), :record)
 
     {:ok, history}
-  end
-
-  def handle_call(:chart, _form, history) do
-    History.chart(history)
-    {:reply, :ok, history}
   end
 
   @impl GenServer
