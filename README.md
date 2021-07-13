@@ -59,7 +59,7 @@ iex> Mobius.plot()
 
 ### Printing current metrics
 
-To see the current metrics you can use `Mobius.metrics_report/0`:
+To see the current metrics you can use `Mobius.info/0`:
 
 ```
 iex> Mobius.info()
