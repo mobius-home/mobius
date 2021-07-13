@@ -5,7 +5,7 @@ defmodule Mobius.History do
 
   use GenServer
 
-  alias Mobius.MetricsTable
+  alias Mobius.Metrics.History
 
   @typedoc """
   A historicial record of the what values the metrics contained at a
@@ -28,28 +28,19 @@ defmodule Mobius.History do
 
   @impl GenServer
   def init(args) do
-    metrics_table = Keyword.get(args, :table_name)
-    buffer_size = Keyword.get(args, :history_size, 500)
-    snapshot_interval = Keyword.get(args, :snapshot_interval, 1_000)
+    history = History.init(args)
+    :timer.send_interval(history.interval, self(), :record)
 
-    buffer = CircularBuffer.new(buffer_size)
-    interval = :timer.send_interval(snapshot_interval, self(), :record)
-
-    {:ok, %{buffer: buffer, table: metrics_table, interval: interval}}
+    {:ok, history}
   end
 
   @impl GenServer
-  def handle_call(:view, _from, state) do
-    history = CircularBuffer.to_list(state.buffer)
-
-    {:reply, history, state}
+  def handle_call(:view, _from, history) do
+    {:reply, History.view(history), history}
   end
 
   @impl GenServer
-  def handle_info(:record, state) do
-    metrics = MetricsTable.get_entries(state.table)
-    new_buffer = CircularBuffer.insert(state.buffer, {DateTime.utc_now(), metrics})
-
-    {:noreply, %{state | buffer: new_buffer}}
+  def handle_info(:record, history) do
+    {:noreply, History.snapshot(history, DateTime.utc_now())}
   end
 end

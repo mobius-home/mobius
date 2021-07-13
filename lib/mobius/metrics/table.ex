@@ -1,7 +1,5 @@
-defmodule Mobius.MetricsTable do
-  @moduledoc """
-
-  """
+defmodule Mobius.Metrics.Table do
+  @moduledoc false
 
   # Table for tracking current state of metrics
 

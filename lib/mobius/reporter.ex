@@ -6,7 +6,7 @@ defmodule Mobius.Reporter do
   alias Telemetry.Metrics
   alias Telemetry.Metrics.{Counter, LastValue}
 
-  alias Mobius.MetricsTable
+  alias Mobius.Metrics.Table
 
   require Logger
 
@@ -64,11 +64,11 @@ defmodule Mobius.Reporter do
   end
 
   defp update_metrics(table, %Counter{} = metric, _value, tags) do
-    MetricsTable.inc_counter(table, metric.name, tags)
+    Table.inc_counter(table, metric.name, tags)
   end
 
   defp update_metrics(table, %LastValue{} = metric, value, tags) do
-    MetricsTable.put(table, metric.name, :last_value, value, tags)
+    Table.put(table, metric.name, :last_value, value, tags)
   end
 
   defp keep?(%{keep: keep}, metadata) when keep != nil, do: keep.(metadata)
