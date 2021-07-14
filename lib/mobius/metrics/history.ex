@@ -36,10 +36,15 @@ defmodule Mobius.Metrics.History do
   """
   @spec view(t(), [Mobius.History.view_opt()]) :: [Mobius.History.record()]
   def view(history, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 25)
+    previous = Keyword.get(opts, :previous, 25)
+    history_list = CircularBuffer.to_list(history.buffer)
+    number_records = Enum.count(history_list)
 
-    CircularBuffer.to_list(history.buffer)
-    |> Enum.take(limit)
+    if number_records > previous do
+      Enum.drop(history_list, number_records - previous)
+    else
+      history_list
+    end
   end
 
   @doc """

@@ -11,7 +11,7 @@ defmodule Mobius.History do
   """
   @type record() :: {DateTime.t(), [MetricsTable.entry()]}
 
-  @type view_opt() :: {:limit, non_neg_integer()}
+  @type view_opt() :: {:previous, non_neg_integer()}
 
   @doc false
   def start_link(args) do

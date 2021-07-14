@@ -55,7 +55,7 @@ defmodule Mobius do
   """
   @spec plot() :: :ok
   def plot() do
-    History.view(limit: 340)
+    History.view(previous: 90)
     |> Enum.flat_map(fn {_timestamp, metric} -> metric end)
     |> Enum.group_by(fn {event_name, event_type, _data, meta} ->
       {event_name, event_type, meta}
