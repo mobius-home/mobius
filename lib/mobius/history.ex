@@ -11,6 +11,8 @@ defmodule Mobius.History do
   """
   @type record() :: {DateTime.t(), [MetricsTable.entry()]}
 
+  @type view_opt() :: {:limit, non_neg_integer()}
+
   @doc false
   def start_link(args) do
     GenServer.start_link(__MODULE__, args, name: __MODULE__)
@@ -19,9 +21,9 @@ defmodule Mobius.History do
   @doc """
   View the metric history recorded by Mobius
   """
-  @spec view() :: [record()]
-  def view() do
-    GenServer.call(__MODULE__, :view)
+  @spec view([view_opt()]) :: [record()]
+  def view(opts \\ []) do
+    GenServer.call(__MODULE__, {:view, opts})
   end
 
   @impl GenServer
@@ -33,8 +35,8 @@ defmodule Mobius.History do
   end
 
   @impl GenServer
-  def handle_call(:view, _from, history) do
-    {:reply, History.view(history), history}
+  def handle_call({:view, opts}, _from, history) do
+    {:reply, History.view(history, opts), history}
   end
 
   @impl GenServer

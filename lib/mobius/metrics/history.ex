@@ -34,9 +34,12 @@ defmodule Mobius.Metrics.History do
   @doc """
   View the records
   """
-  @spec view(t()) :: [Mobius.History.record()]
-  def view(history) do
+  @spec view(t(), [Mobius.History.view_opt()]) :: [Mobius.History.record()]
+  def view(history, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 25)
+
     CircularBuffer.to_list(history.buffer)
+    |> Enum.take(limit)
   end
 
   @doc """
