@@ -53,8 +53,15 @@ defmodule Mobius.Metrics.History do
   @spec snapshot(t(), DateTime.t()) :: t()
   def snapshot(history, date_time) do
     metrics = Table.get_entries(history.table)
-    new_buffer = CircularBuffer.insert(history.buffer, {date_time, metrics})
 
-    %{history | buffer: new_buffer}
+    insert_metrics(history, date_time, metrics)
+  end
+
+  defp insert_metrics(history, _date_time, []), do: history
+
+  defp insert_metrics(history, date_time, [metric | metrics]) do
+    buff = CircularBuffer.insert(history.buffer, {date_time, metric})
+
+    insert_metrics(%{history | buffer: buff}, date_time, metrics)
   end
 end

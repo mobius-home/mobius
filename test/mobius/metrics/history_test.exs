@@ -9,6 +9,7 @@ defmodule Mobius.Metrics.HistoryTest do
     Table.init(table_name: table)
 
     Table.put(table, [:test], :counter, nil)
+    Table.put(table, [:test], :last_value, 1000)
 
     {:ok, %{table: table}}
   end
@@ -19,6 +20,10 @@ defmodule Mobius.Metrics.HistoryTest do
 
     new_history = History.snapshot(history, date_time)
 
-    assert [{date_time, [{[:test], :counter, 1, %{}}]}] == History.view(new_history)
+    assert [
+             {date_time, {[:test], :last_value, 1000, %{}}},
+             {date_time, {[:test], :counter, 1, %{}}}
+           ] ==
+             History.view(new_history)
   end
 end

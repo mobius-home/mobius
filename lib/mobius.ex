@@ -50,18 +50,16 @@ defmodule Mobius do
     Supervisor.init(children, strategy: :one_for_one)
   end
 
+  @type plot_opt() :: {:event_name, :telemetry.event_name()}
+
   @doc """
   Plot metric information to the console
   """
-  @spec plot() :: :ok
-  def plot() do
+  @spec plot([plot_opt()]) :: :ok
+  def plot(_opts \\ []) do
     History.view(previous: 90)
-    |> Enum.flat_map(fn {_timestamp, metric} -> metric end)
-    |> Enum.group_by(fn {event_name, event_type, _data, meta} ->
-      {event_name, event_type, meta}
-    end)
-    |> Enum.each(fn {{event_name, type, meta}, ms} ->
-      series = Enum.map(ms, fn {_en, _et, value, _meta} -> value end)
+    |> Enum.group_by(&name_type_meta_group/1, &name_type_meta_group_value/1)
+    |> Enum.each(fn {{event_name, type, meta}, series} ->
       {:ok, chart} = Mobius.Asciichart.plot(series, height: 10)
 
       chart = [
@@ -83,6 +81,10 @@ defmodule Mobius do
       IO.puts(chart)
     end)
   end
+
+  defp name_type_meta_group({_date_time, {name, type, _value, meta}}), do: {name, type, meta}
+
+  defp name_type_meta_group_value({_date_time, {_name, _type, value, _meta}}), do: value
 
   defp make_event_name(event_name, :counter),
     do: event_name |> Enum.take(length(event_name) - 1) |> Enum.join(".")
