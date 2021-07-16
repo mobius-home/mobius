@@ -24,7 +24,7 @@ defmodule Mobius.Metrics.Table do
       Keyword.get(args, :table_name) ||
         raise ArgumentError, "Please provide a table name for the Mobius metrics table"
 
-    :ets.new(table_name, [:named_table, :public, :set])
+    _ = :ets.new(table_name, [:named_table, :public, :set])
 
     :ok
   end

@@ -3,13 +3,13 @@ defmodule Mobius.History do
 
   use GenServer
 
-  alias Mobius.Metrics.History
+  alias Mobius.Metrics.{History, Table}
 
   @typedoc """
   A historicial record of the what values the metrics contained at a
   particualar time.
   """
-  @type record() :: {DateTime.t(), [MetricsTable.entry()]}
+  @type record() :: {DateTime.t(), [Table.entry()]}
 
   @type view_opt() :: {:previous, non_neg_integer()}
 
@@ -29,7 +29,7 @@ defmodule Mobius.History do
   @impl GenServer
   def init(args) do
     history = History.init(args)
-    :timer.send_interval(history.interval, self(), :record)
+    _ = :timer.send_interval(history.interval, self(), :record)
 
     {:ok, history}
   end

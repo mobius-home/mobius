@@ -34,7 +34,7 @@ defmodule Mobius.Reporter do
 
     for {event, metrics} <- Enum.group_by(all_metrics, & &1.event_name) do
       id = {__MODULE__, event, self()}
-      :telemetry.attach(id, event, &handle_event/4, metrics: metrics, table_name: table)
+      _ = :telemetry.attach(id, event, &handle_event/4, metrics: metrics, table_name: table)
     end
 
     {:ok, nil}

@@ -57,6 +57,9 @@ iex> Mobius.plot()
 33335095.27 ┼────╯
 ```
 
+You can filter on the telemetry event name, meta data tags, and metric type. See
+`Mobius.plot_opt` type doc for more information.
+
 ### Printing current metrics
 
 To see the current metrics you can use `Mobius.info/0`:
