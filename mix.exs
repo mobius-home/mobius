@@ -48,7 +48,7 @@ defmodule Mobius.MixProject do
   end
 
   defp description do
-    "Localized observability library"
+    "Local metrics library"
   end
 
   defp package do
