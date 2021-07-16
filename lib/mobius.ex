@@ -27,7 +27,26 @@ defmodule Mobius do
           | {:history_size, non_neg_integer()}
           | {:snapshot_interval, non_neg_integer()}
 
+  @typedoc """
+  Options for print info
+
+  * `:table_name` - the name of the table that is used to store the current metrics
+  """
   @type info_opt() :: {:table_name, atom()}
+
+  @typedoc """
+  Options filer data for the plot
+
+  * `:event_name` - the telemetry event name
+  * `:metric` - the type of metric
+  * `:tags` - meta data tags and their values you want to filter on
+  * `:previous` - the previous `n` number of entries (defaults 90)
+  """
+  @type plot_opt() ::
+          {:event_name, :telemetry.event_name()}
+          | {:metric, :counter | :last_value}
+          | {:tags, map()}
+          | {:previous, non_neg_integer()}
 
   @spec start_link([arg()]) :: Supervisor.on_start()
   def start_link(args) do
@@ -50,14 +69,15 @@ defmodule Mobius do
     Supervisor.init(children, strategy: :one_for_one)
   end
 
-  @type plot_opt() :: {:event_name, :telemetry.event_name()}
-
   @doc """
   Plot metric information to the console
   """
   @spec plot([plot_opt()]) :: :ok
-  def plot(_opts \\ []) do
-    History.view(previous: 90)
+  def plot(opts \\ []) do
+    opts = Keyword.merge([previous: 90], opts)
+
+    opts
+    |> History.view()
     |> Enum.group_by(&name_type_meta_group/1, &name_type_meta_group_value/1)
     |> Enum.each(fn {{event_name, type, meta}, series} ->
       {:ok, chart} = Mobius.Asciichart.plot(series, height: 10)

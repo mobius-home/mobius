@@ -38,14 +38,64 @@ defmodule Mobius.Metrics.History do
   def view(history, opts \\ []) do
     previous = Keyword.get(opts, :previous, 25)
     history_list = CircularBuffer.to_list(history.buffer)
-    number_records = Enum.count(history_list)
 
-    if number_records > previous do
-      Enum.drop(history_list, number_records - previous)
+    history_list
+    |> apply_filters(opts)
+    |> apply_limit(previous)
+  end
+
+  defp apply_limit(list, num_prev_records) do
+    num_records = length(list)
+
+    if num_records > num_prev_records do
+      Enum.drop(list, num_records - num_prev_records)
     else
-      history_list
+      list
     end
   end
+
+  defp apply_filters(list, opts) do
+    require Logger
+    tags = Keyword.get(opts, :tags, [])
+    metric = Keyword.get(opts, :metric)
+
+    case Keyword.get(opts, :event_name) do
+      nil ->
+        list
+
+      name ->
+        Enum.filter(list, fn
+          {_date_time, {^name, item_metric, _value, meta}} ->
+            # Logger.warn("#{inspect(item_metric)} == #{inspect(metric)}")
+            # Logger.warn("#{inspect(check_type(item_metric, metric))}")
+
+            # Logger.warn("#{inspect(meta)} ? #{inspect(tags)}")
+            # Logger.warn("#{inspect(check_tags(meta, tags))}")
+
+            check_type(item_metric, metric) && check_tags(meta, tags)
+
+          _ ->
+            false
+        end)
+    end
+  end
+
+  defp check_tags(meta, tag_filters) do
+    Enum.reduce_while(tag_filters, true, fn {tag_name, tag_value}, is_ok ->
+      if Map.has_key?(meta, tag_name) do
+        if meta[tag_name] == tag_value do
+          {:cont, is_ok}
+        else
+          {:halt, false}
+        end
+      else
+        {:cont, is_ok}
+      end
+    end)
+  end
+
+  defp check_type(_metric, nil), do: true
+  defp check_type(metric, filter_metric), do: metric == filter_metric
 
   @doc """
   Reads from the table and inserts the data into the history with the time stamp
