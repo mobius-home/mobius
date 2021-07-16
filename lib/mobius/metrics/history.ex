@@ -55,7 +55,6 @@ defmodule Mobius.Metrics.History do
   end
 
   defp apply_filters(list, opts) do
-    require Logger
     tags = Keyword.get(opts, :tags, [])
     metric = Keyword.get(opts, :metric)
 
@@ -66,12 +65,6 @@ defmodule Mobius.Metrics.History do
       name ->
         Enum.filter(list, fn
           {_date_time, {^name, item_metric, _value, meta}} ->
-            # Logger.warn("#{inspect(item_metric)} == #{inspect(metric)}")
-            # Logger.warn("#{inspect(check_type(item_metric, metric))}")
-
-            # Logger.warn("#{inspect(meta)} ? #{inspect(tags)}")
-            # Logger.warn("#{inspect(check_tags(meta, tags))}")
-
             check_type(item_metric, metric) && check_tags(meta, tags)
 
           _ ->
