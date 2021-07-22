@@ -31,7 +31,7 @@ defmodule Mobius.MixProject do
       {:ex_doc, "~> 0.24", only: :docs, runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:telemetry, "~> 0.4.3"},
+      {:telemetry, "~> 0.4.3 or ~> 1.0"},
       {:telemetry_metrics, "~> 0.6.0"},
       {:circular_buffer, "~> 0.4.0"}
     ]
