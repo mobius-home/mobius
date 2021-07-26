@@ -17,4 +17,12 @@ defmodule Example do
       %{ifname: ifname, status: connection_status}
     )
   end
+
+  def inc(ifname \\ "wwan0") do
+    :telemetry.execute(
+      [:example, :inc],
+      %{duration: 100},
+      %{ifname: ifname}
+    )
+  end
 end
