@@ -9,8 +9,6 @@ defmodule Mobius.MetricsTable do
   # External object structure
   # {name, type, value, meta}
 
-  @type name() :: atom()
-
   @typedoc """
   The structure of how metric information from the metrics table
   """
@@ -19,17 +17,43 @@ defmodule Mobius.MetricsTable do
   @doc """
   Initialize the metrics table
   """
-  @spec init(name()) :: name()
-  def init(name) do
-    :ets.new(name, [:named_table, :public, :set])
+  @spec init([Mobius.arg()]) :: Mobius.name()
+  def init(args) do
+    case read_table_from_file(args) do
+      {:ok, table} ->
+        table
+
+      {:error, :enoent} ->
+        :ets.new(args[:name], [:named_table, :public, :set])
+    end
+  end
+
+  defp read_table_from_file(args) do
+    path = Path.join(args[:persistence_dir], "metrics_table")
+
+    if File.exists?(path) do
+      :ets.file2tab(String.to_charlist(path))
+    else
+      {:error, :enoent}
+    end
   end
 
   defp make_key(name, type, meta), do: {name, type, meta}
 
   @doc """
+  Save the ets table to a file
+  """
+  @spec save(Mobius.name(), Path.t()) :: :ok | {:error, reason :: term()}
+  def save(name, persistence_dir) do
+    file = String.to_charlist("#{persistence_dir}/metrics_table")
+
+    :ets.tab2file(name, file)
+  end
+
+  @doc """
   Put the metric information in to the metric table
   """
-  @spec put(name(), Mobius.metric_name(), Mobius.metric_type(), integer(), map()) :: :ok
+  @spec put(Mobius.name(), Mobius.metric_name(), Mobius.metric_type(), integer(), map()) :: :ok
   def put(name, event_name, type, value, meta \\ %{})
 
   def put(name, event_name, :counter, _value, meta) do
@@ -57,7 +81,7 @@ defmodule Mobius.MetricsTable do
   @doc """
   Increment a counter metric
   """
-  @spec inc_counter(name(), Mobius.metric_name(), map()) :: :ok
+  @spec inc_counter(Mobius.name(), Mobius.metric_name(), map()) :: :ok
   def inc_counter(name, event_name, meta \\ %{}) do
     put(name, event_name, :counter, 1, meta)
   end
@@ -65,7 +89,7 @@ defmodule Mobius.MetricsTable do
   @doc """
   Get all entries in the table
   """
-  @spec get_entries(name()) :: [metric_entry()]
+  @spec get_entries(Mobius.name()) :: [metric_entry()]
   def get_entries(name) do
     ms = [
       {
@@ -81,7 +105,7 @@ defmodule Mobius.MetricsTable do
   @doc """
   Get metrics by event name
   """
-  @spec get_entries_by_event_name(name(), Mobius.metric_name()) :: [metric_entry()]
+  @spec get_entries_by_event_name(Mobius.name(), Mobius.metric_name()) :: [metric_entry()]
   def get_entries_by_event_name(name, event_name) do
     ms = [
       {{{:"$1", :"$2", :"$3"}, :"$4"}, [{:==, :"$1", event_name}],

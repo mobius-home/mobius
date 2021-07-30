@@ -6,7 +6,7 @@ defmodule Mobius.EventsTest do
 
   setup do
     table = :mobius_test_events
-    MetricsTable.init(table)
+    MetricsTable.init(name: table, persistence_dir: "/does/not/matter/here")
 
     {:ok, %{table: table}}
   end

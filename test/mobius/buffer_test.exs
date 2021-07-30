@@ -5,6 +5,7 @@ defmodule Mobius.BufferTest do
 
   test "inserts correctly" do
     {:ok, my_buffer} = Buffer.start_link(resolution: :minute)
+
     dt = DateTime.utc_now()
     metric = {[:my, :metric], :counter, 1, %{hello: :world}}
 

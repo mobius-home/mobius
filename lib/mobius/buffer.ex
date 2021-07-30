@@ -6,17 +6,12 @@ defmodule Mobius.Buffer do
   alias Mobius.Buffer.Registry, as: BufferRegistry
   alias Mobius.Resolutions
 
-  @typedoc """
-  Arguments to start the buffer
-
-  * `:resolution` - the resolution to determinate the size of the buffer
-  """
-  @type arg() :: {:resolution, Mobius.resolution()}
+  require Logger
 
   @doc """
   Start the buffer
   """
-  @spec start_link([arg()]) :: GenServer.on_start()
+  @spec start_link([Mobius.arg()]) :: GenServer.on_start()
   def start_link(args) do
     name = gen_server_opts_from_args(args)
     GenServer.start_link(__MODULE__, args, name)
@@ -55,9 +50,40 @@ defmodule Mobius.Buffer do
   @impl GenServer
   def init(args) do
     resolution = Keyword.fetch!(args, :resolution)
-    size = Resolutions.resolution_to_size(resolution)
+    persistence_dir = Keyword.get(args, :persistence_dir)
+    buffer = read_buffer_from_file(persistence_dir, resolution)
 
-    {:ok, %{buffer: CircularBuffer.new(size)}}
+    Process.flag(:trap_exit, true)
+
+    {:ok,
+     %{
+       buffer: buffer,
+       resolution: resolution,
+       persistence_dir: persistence_dir
+     }}
+  end
+
+  defp read_buffer_from_file(nil, resolution) do
+    resolution
+    |> Resolutions.resolution_to_size()
+    |> CircularBuffer.new()
+  end
+
+  defp read_buffer_from_file(persistence_dir, resolution) do
+    file = buffer_file(persistence_dir, resolution)
+
+    case File.read(file) do
+      {:ok, contents} ->
+        :erlang.binary_to_term(contents)
+
+      {:error, _error} ->
+        size = Resolutions.resolution_to_size(resolution)
+        CircularBuffer.new(size)
+    end
+  end
+
+  defp buffer_file(persistence_dir, resolution) do
+    Path.join(persistence_dir, to_string(resolution))
   end
 
   @impl GenServer
@@ -69,5 +95,30 @@ defmodule Mobius.Buffer do
 
   def handle_call(:to_list, _from, state) do
     {:reply, CircularBuffer.to_list(state.buffer), state}
+  end
+
+  @impl GenServer
+  def terminate(_reason, %{persistence_dir: nil}), do: :ok
+
+  def terminate(_reason, state) do
+    file = buffer_file(state.persistence_dir, state.resolution)
+    contents = :erlang.term_to_binary(state.buffer)
+
+    case File.write(file, contents) do
+      :ok ->
+        :ok
+
+      error ->
+        Logger.warn(
+          "Failed to save metrics buffer #{inspect(state.resolution)} because #{inspect(error)}"
+        )
+
+        error
+    end
+  end
+
+  @impl GenServer
+  def handle_info(_message, state) do
+    {:noreply, state}
   end
 end

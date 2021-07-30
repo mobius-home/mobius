@@ -45,6 +45,24 @@ Mobius scrapes current metric information at different resolutions:
 `:week` - metrics over the last week in 1 day intervals
 `:month` - metrics over the last 31 days in 1 day intervals
 
+### Configure persistence directory
+
+By default Mobius will try to save metric data for all resolutions and the
+current value when the erlang system exists gracefully. This makes Mobius useful
+for Nerves devices that have to reboot after doing a planned firmware update.
+The default direction Mobius will try to persist data to is the `/data`
+directory as this is friendly to Nerves devices. If you want Mobius to store
+data in a different location you can pass that into Mobius when you start it:
+
+```elixir
+
+children = [
+   # ... other children ...
+   {Mobius, metrics: metrics, persistence_dir: "/tmp"}
+   # ... other children ...
+]
+```
+
 ### Charting historical metrics
 
 Mobius tracks metrics overtime in a circular buffer and allows you to graph

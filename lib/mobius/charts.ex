@@ -42,7 +42,7 @@ defmodule Mobius.Charts do
 
     series =
       opts
-      |> Keyword.get(:name, :mobius_metrics)
+      |> Keyword.get(:name, :mobius)
       |> Buffer.to_list(resolution)
       |> Enum.flat_map(fn {_timestamp, metrics} ->
         series_for_metric_from_metrics(metrics, parsed_metric_name, tags)
@@ -88,7 +88,7 @@ defmodule Mobius.Charts do
   """
   @spec info(Mobius.name() | nil) :: :ok
   def info(name \\ nil) do
-    name = name || :mobius_metrics
+    name = name || :mobius
 
     name
     |> MetricsTable.get_entries()
