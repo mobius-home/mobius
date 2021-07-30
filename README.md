@@ -39,11 +39,11 @@ end
 
 Mobius scrapes current metric information at different resolutions:
 
-`:minute` - metrics over the last minute in 1 second intervals
-`:hour` - metrics over the last hour in 1 minute intervals 
-`:day` - metrics over the last day in 1 hour intervals
-`:week` - metrics over the last week in 1 day intervals
-`:month` - metrics over the last 31 days in 1 day intervals
+* `:minute` - metrics over the last minute in 1 second intervals
+* `:hour` - metrics over the last hour in 1 minute intervals 
+* `:day` - metrics over the last day in 1 hour intervals
+* `:week` - metrics over the last week in 1 day intervals
+* `:month` - metrics over the last 31 days in 1 day intervals
 
 ### Configure persistence directory
 
