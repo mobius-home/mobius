@@ -9,15 +9,17 @@ defmodule Mobius do
 
   alias Telemetry.Metrics
 
-  @default_args [name: :mobius_metrics]
+  @default_args [name: :mobius, persistence_dir: "/data"]
 
   @typedoc """
   Arguments to Mobius
 
-  * `:name` - the name of the mobius instance (defaults to `:mobius_metrics`)
+  * `:name` - the name of the mobius instance (defaults to `:mobius`)
   * `:metrics` - list of telemetry metrics for Mobius to track
+  * `:persistence_dir` - the top level directory where mobius will persist
+    metric information
   """
-  @type arg() :: {:name, name()} | {:metrics, [Metrics.t()]}
+  @type arg() :: {:name, name()} | {:metrics, [Metrics.t()]} | {:persistence_dir, binary()}
 
   @typedoc """
   The name of the Mobius instance
@@ -42,7 +44,7 @@ defmodule Mobius do
   @type metric_name() :: [atom()]
 
   @doc """
-  args: metrics, name
+  Start Mobius
   """
   def start_link(args) do
     Supervisor.start_link(__MODULE__, ensure_args(args), name: __MODULE__.Supervisor)
@@ -50,9 +52,14 @@ defmodule Mobius do
 
   @impl Supervisor
   def init(args) do
-    MetricsTable.init(args[:name])
+    mobius_persistence_path = Path.join(args[:persistence_dir], to_string(args[:name]))
+    :ok = ensure_mobius_persistence_dir(mobius_persistence_path)
+    args = Keyword.put(args, :persistence_dir, mobius_persistence_path)
+
+    MetricsTable.init(args)
 
     children = [
+      {Mobius.MetricsTable.Monitor, args},
       {Mobius.Registry, args},
       {Mobius.BuffersSupervisor, args}
     ]
@@ -62,5 +69,18 @@ defmodule Mobius do
 
   defp ensure_args(args) do
     Keyword.merge(@default_args, args)
+  end
+
+  defp ensure_mobius_persistence_dir(persistence_path) do
+    case File.mkdir(persistence_path) do
+      :ok ->
+        :ok
+
+      {:error, :eexist} ->
+        :ok
+
+      error ->
+        error
+    end
   end
 end

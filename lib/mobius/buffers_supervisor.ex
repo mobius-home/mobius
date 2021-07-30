@@ -27,12 +27,12 @@ defmodule Mobius.BuffersSupervisor do
   This will start buffers for a `table` that contains metrics. This buffer will
   have snapshots taken at a `resolution`.
   """
-  @spec start_buffer_for_metrics(Mobius.name(), Mobius.resolution()) ::
+  @spec start_buffer_for_metrics(Mobius.resolution(), [Mobius.arg()]) ::
           Supervisor.on_start_child()
-  def start_buffer_for_metrics(name, resolution) do
+  def start_buffer_for_metrics(resolution, args) do
     DynamicSupervisor.start_child(
       __MODULE__,
-      {Mobius.Buffer.Supervisor, resolution: resolution, name: name}
+      {Mobius.Buffer.Supervisor, Keyword.put(args, :resolution, resolution)}
     )
   end
 
@@ -52,7 +52,7 @@ defmodule Mobius.BuffersSupervisor do
     resolutions = [:month, :week, :day, :hour, :minute]
 
     for resolution <- resolutions do
-      start_buffer_for_metrics(args[:name], resolution)
+      start_buffer_for_metrics(resolution, args)
     end
   end
 end

@@ -10,11 +10,6 @@ defmodule Example.Application do
   @impl true
   def start(_type, _args) do
     metrics = [
-      # Metrics.last_value("vm.memory.total"),
-
-      # Metrics.counter("vintage_net_qmi.connection.end.duration", tags: [:ifname, :status]),
-      # Metrics.last_value("vintage_net_qmi.connection.end.duration", tags: [:ifname, :status])
-
       Metrics.counter("example.inc.count", tags: [:ifname]),
       Metrics.last_value("example.inc.duration", tags: [:ifname]),
 
@@ -24,7 +19,7 @@ defmodule Example.Application do
     children = [
       # Starts a worker by calling: Example.Worker.start_link(arg)
       # {Example.Worker, arg}
-      {Mobius, metrics: metrics}
+      {Mobius, metrics: metrics, persistence_dir: "/tmp"}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
