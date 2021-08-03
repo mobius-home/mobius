@@ -3,18 +3,16 @@ defmodule Mobius.Charts do
   Module for plotting and reporting about metric data
   """
 
-  alias Mobius.{Buffer, MetricsTable}
+  alias Mobius.{MetricsTable, Scraper}
 
   @typedoc """
   Options to use when plotting time series metric data
 
-  * `:resolution` - at what time scale you want to see the past event
-    (default `:minute`)
   * `:name` - the name of the Mobius instance you are using. Unless you
     specified this in your configuration you should be safe to allow this
     option to default, which is `:mobius_metrics`.
   """
-  @type plot_opt() :: {:resolution, Mobius.resolution()} | {:name, Mobius.name()}
+  @type plot_opt() :: {:name, Mobius.name()}
 
   @doc """
   Plot the metric name to the screen
@@ -24,26 +22,15 @@ defmodule Mobius.Charts do
   ```elixir
   Mobius.Charts.plot("vm.memory.total", %{some: :tag})
   ```
-
-  Optionally you can pass in a resolution to see the metrics recorded over time
-  specified by the resolution.
-
-  ```elixir
-  Mobius.Charts.plot("vm.memory.total", %{}, resolution: :hour)
-  ```
-
-  By default the resolution is `:minute`, which will display the metrics over
-  the last minute.
   """
   @spec plot(binary(), map(), [plot_opt()]) :: :ok
   def plot(metric_name, tags \\ %{}, opts \\ []) do
     parsed_metric_name = parse_metric_name(metric_name)
-    resolution = Keyword.get(opts, :resolution, :minute)
 
     series =
       opts
       |> Keyword.get(:name, :mobius)
-      |> Buffer.to_list(resolution)
+      |> Scraper.all()
       |> Enum.flat_map(fn {_timestamp, metrics} ->
         series_for_metric_from_metrics(metrics, parsed_metric_name, tags)
       end)

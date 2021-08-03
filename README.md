@@ -37,14 +37,6 @@ def start(_type, _args) do
 end
 ```
 
-Mobius scrapes current metric information at different resolutions:
-
-* `:minute` - metrics over the last minute in 1 second intervals
-* `:hour` - metrics over the last hour in 1 minute intervals 
-* `:day` - metrics over the last day in 1 hour intervals
-* `:week` - metrics over the last week in 1 day intervals
-* `:month` - metrics over the last 31 days in 1 day intervals
-
 ### Configure persistence directory
 
 By default Mobius will try to save metric data for all resolutions and the
@@ -84,31 +76,6 @@ iex> Mobius.Charts.plot("vm.memory.total")
 33437166.55 ┤    │
 33335095.27 ┼────╯
 ```
-
-By default Mobius will plot the metrics over the last minute. You can see other
-resolutions by passing the `:resolution` option:
-
-```
-iex> Mobius.Charts.plot("vm.memory.total", %{}, resolution: :hour)
-                Metric Name: vm.memory.total, Tags: %{}
-
-75190128.00 ┤
-75152538.46 ┤                    ╭╮                                  ╭╮╭
-75114948.92 ┤                    ││   ╭╮   ╭─╮ ╭╮ ╭╮      ╭╮         │││
-75077359.38 ┤            ╭╮      │╰╮╭╮││   │ │ ││ ││╭╮    ││╭╮╭╮ ╭╮  │││
-75039769.85 ┤            ││      │ │││││   │ │ ││ ││││    ││││││ ││  │╰╯
-75002180.31 ┤            ││╭╮╭──╮│ ╰╯│││╭╮ │ ╰─╯│ │╰╯│╭╮  ││││││ ││ ╭╯
-74964590.77 ┤ ╭╮      ╭╮╭╯╰╯││  ╰╯   ││││╰╮│    │ │  ││╰──╯││││╰╮│╰╮│
-74927001.23 ┤ ││     ╭╯╰╯   ╰╯       ╰╯╰╯ ╰╯    │ │  ││    ╰╯╰╯ ╰╯ ╰╯
-74889411.69 ┤ ││     │                          ╰─╯  ╰╯
-74851822.15 ┤╭╯│     │
-74814232.62 ┤│ │╭╮   │
-74776643.08 ┤│ ╰╯│   │
-74739053.54 ┼╯   ╰───╯
-```
-
-See `Mobius.resolution` type for more information about the resolutions that
-Mobius supports.
 
 ### Printing current metrics
 
