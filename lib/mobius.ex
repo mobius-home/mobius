@@ -18,6 +18,10 @@ defmodule Mobius do
   * `:metrics` - list of telemetry metrics for Mobius to track
   * `:persistence_dir` - the top level directory where mobius will persist
     metric information
+  * `:day_count` - number of day-granularity samples to keep
+  * `:hour_count` - number of hour-granularity samples to keep
+  * `:minute_count` - number of minute-granularity samples to keep
+  * `:second_count` - number of second-granularity samples to keep
   """
   @type arg() :: {:name, name()} | {:metrics, [Metrics.t()]} | {:persistence_dir, binary()}
 
@@ -27,17 +31,6 @@ defmodule Mobius do
   This is used to store data for a particular set of mobius metrics.
   """
   @type name() :: atom()
-
-  @typedoc """
-  The time resolution of the metrics being collected
-
-  * `:month` - metrics over the last 31 days
-  * `:week` - metrics over the last 7 days
-  * `:day` - metrics over the last 24 hours
-  * `:hour` - metrics over the last 60 minutes
-  * `:minute` - metrics over the last 60 seconds
-  """
-  @type resolution() :: :month | :week | :day | :hour | :minute
 
   @type metric_type() :: :counter | :last_value
 
@@ -54,14 +47,21 @@ defmodule Mobius do
   def init(args) do
     mobius_persistence_path = Path.join(args[:persistence_dir], to_string(args[:name]))
     :ok = ensure_mobius_persistence_dir(mobius_persistence_path)
-    args = Keyword.put(args, :persistence_dir, mobius_persistence_path)
+
+    args =
+      args
+      |> Keyword.put(:persistence_dir, mobius_persistence_path)
+      |> Keyword.put_new(:day_count, 60)
+      |> Keyword.put_new(:hour_count, 48)
+      |> Keyword.put_new(:minute_count, 120)
+      |> Keyword.put_new(:second_count, 120)
 
     MetricsTable.init(args)
 
     children = [
       {Mobius.MetricsTable.Monitor, args},
       {Mobius.Registry, args},
-      {Mobius.BuffersSupervisor, args}
+      {Mobius.Scraper, args}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
