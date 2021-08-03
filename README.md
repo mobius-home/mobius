@@ -112,7 +112,7 @@ Mobius supports.
 
 ### Printing current metrics
 
-To see the current metrics you can use `Mobius.info/0`:
+To see the current metrics you can use `Mobius.Charts.info/0`:
 
 ```
 iex> Mobius.Charts.info()
