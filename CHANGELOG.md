@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.3.0] 2021-8-19
+
+### Changed
+- Deleted `Mobius.Charts` module. The functions in this module are now located
+  in the `Mobius` module.
+
+### Removed
+- Support for specifying resolutions.
+
+
 ## v0.2.0 (2021-8-03)
 
 Provides time based resolution and will backup historical data on graceful
