@@ -27,12 +27,20 @@ defmodule Mobius.Scraper do
     Module.concat(__MODULE__, mobius_name)
   end
 
+  @typedoc """
+  Options to pass to the all call
+
+  * `:from` - the unix timestamp, in seconds, to start querying form
+  * `:to` - the unix timestamp, in seconds, to query to
+  """
+  @type all_opt() :: {:from, integer()} | {:to, integer()}
+
   @doc """
   Get all the records
   """
-  @spec all(Mobius.name()) :: [record()]
-  def all(name) do
-    GenServer.call(name(name), :get)
+  @spec all(Mobius.name(), [all_opt()]) :: [record()]
+  def all(name, opts \\ []) do
+    GenServer.call(name(name), {:get, opts})
   end
 
   @impl GenServer
@@ -79,8 +87,24 @@ defmodule Mobius.Scraper do
   end
 
   @impl GenServer
-  def handle_call(:get, _from, state) do
-    {:reply, History.all(state.history), state}
+  def handle_call({:get, opts}, _from, state) do
+    case Keyword.get(opts, :from) do
+      nil ->
+        {:reply, History.all(state.history), state}
+
+      from ->
+        {:reply, query_history(from, state, opts), state}
+    end
+  end
+
+  defp query_history(from, state, opts) do
+    case opts[:to] do
+      nil ->
+        History.query(state.history, from)
+
+      to ->
+        History.query(state.history, from, to)
+    end
   end
 
   @impl GenServer

@@ -11,6 +11,8 @@ defmodule Mobius do
 
   @default_args [name: :mobius, persistence_dir: "/data"]
 
+  @type time_unit() :: :second | :minute | :hour | :day
+
   @typedoc """
   Arguments to Mobius
 
@@ -90,8 +92,19 @@ defmodule Mobius do
   * `:name` - the name of the Mobius instance you are using. Unless you
     specified this in your configuration you should be safe to allow this
     option to default, which is `:mobius_metrics`.
+  * `:last` - display data point that have been captured over the last `x`
+    amount of time. Where `x` is either an integer or a tuple of
+    `{integer(), time_unit()}`. If you only pass an integer the time unit of
+    `:seconds` is assumed. By default Mobius will plot the last 3 minutes of
+    data.
+  * `:from` - the unix timestamp, in seconds, to start querying from
+  * `:to` - the unix timestamp, in seconds, to stop querying at
   """
-  @type plot_opt() :: {:name, Mobius.name()}
+  @type plot_opt() ::
+          {:name, Mobius.name()}
+          | {:last, integer() | {integer(), time_unit()}}
+          | {:from, integer()}
+          | {:to, integer()}
 
   @doc """
   Plot the metric name to the screen
@@ -101,15 +114,41 @@ defmodule Mobius do
   ```elixir
   Mobius.Charts.plot("vm.memory.total", %{some: :tag})
   ```
+
+  By default the plot will display the last 3 minutes of metric history.
+
+  However, you can pass the `:from` and `:to` options to look at a specific
+  range of time.
+
+  ```elixir
+  Mobius.plot("vm.memory.total", %{}, from: 1630619212, to: 1630619219)
+  ```
+
+  You can also plot data over the last `x` amount of time. Where x is an
+  integer. When there is no `time_unit()` provided the unit is assumed to be
+  `:second`.
+
+  Plotting data over the last 30 seconds:
+
+  ```elixir
+  Mobius.plot("vm.memory.total", %{}, last: 30)
+  ```
+
+  Plotting data over the last 2 hours:
+
+  ```elixir
+  Mobius.plot("vm.memory.total", %{}, last: {2, :hour})
+  ```
   """
   @spec plot(binary(), map(), [plot_opt()]) :: :ok
   def plot(metric_name, tags \\ %{}, opts \\ []) do
     parsed_metric_name = parse_metric_name(metric_name)
+    scraper_query_opts = query_opts(opts)
 
     series =
       opts
       |> Keyword.get(:name, :mobius)
-      |> Scraper.all()
+      |> Scraper.all(scraper_query_opts)
       |> Enum.flat_map(fn {_timestamp, metrics} ->
         series_for_metric_from_metrics(metrics, parsed_metric_name, tags)
       end)
@@ -132,6 +171,37 @@ defmodule Mobius do
 
     IO.puts(chart)
   end
+
+  def query_opts(opts) do
+    if opts[:from] do
+      Keyword.take(opts, [:from, :to])
+    else
+      last_ts(opts)
+    end
+  end
+
+  def last_ts(opts) do
+    now = System.system_time(:second)
+
+    ts =
+      case opts[:last] do
+        nil ->
+          now - 180
+
+        {offset, unit} ->
+          now - offset * get_unit_offset(unit)
+
+        offset ->
+          now - offset
+      end
+
+    [from: ts]
+  end
+
+  defp get_unit_offset(:second), do: 1
+  defp get_unit_offset(:minute), do: 60
+  defp get_unit_offset(:hour), do: 3600
+  defp get_unit_offset(:day), do: 86400
 
   defp series_for_metric_from_metrics(metrics, metric_name, tags) do
     Enum.reduce(metrics, [], fn
