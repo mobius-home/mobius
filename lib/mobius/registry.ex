@@ -57,6 +57,8 @@ defmodule Mobius.Registry do
           table: args[:name],
           metrics: metrics
         })
+
+      id
     end
   end
 
