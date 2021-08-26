@@ -203,6 +203,152 @@ defmodule Mobius do
   defp get_unit_offset(:hour), do: 3600
   defp get_unit_offset(:day), do: 86400
 
+  @type naming_opt :: :csv_ext | :timestamp
+  @type csv_opt() ::
+          {:file, String.t()}
+          | {:naming, [naming_opt]}
+          | {:last, integer() | {integer(), time_unit()}}
+          | {:from, integer()}
+          | {:to, integer()}
+
+  @doc """
+  Produces a CSV of currently collected metrics, optionally writing the CSV to file.
+  The CSV looks like: timestamp, name, type, value, tag1, tag2, tag3..., tagN
+  If tags are provided, only the metrics matching the tags are output to the CSV.
+  If a writable file is given via the :file option, the CSV is written to it. Otherwise it is written to the terminal.
+  If the optional :naming option contains :csv_ext, the .csv extension is added to the file name if not already present.
+  If the optional :naming option list :timestamp, the file name is prefixed by a timestamp.
+
+  Just as with plotting, metrics to be outputted to CSV can be restricted to a relative time period:
+
+   * `:last` - metrics captured over the last `x`
+    amount of time. Where `x` is either an integer or a tuple of
+    `{integer(), time_unit()}`. If you only pass an integer the time unit of
+    `:seconds` is assumed. By default the last 3 minutes of
+    data will be outputted.
+  * `:from` - the unix timestamp, in seconds, to start querying from
+  * `:to` - the unix timestamp, in seconds, to stop querying at
+
+  Examples:
+
+  iex> Mobius.to_csv("vm.memory.total", %{})
+  # -- writes CSV values to the terminal
+
+  iex> Mobius.to_csv("vm.memory.total", %{}, file: "/data/csv/vm.memory.total")
+  # -- writes CSV values to file vm.memory.total
+
+  iex> Mobius.to_csv("vm.memory.total", %{}, file: "/data/csv/vm.memory.total", naming: [:csv_ext, :timestamp])
+  # -- writes CSV values to a file like 20210830T174954_vm.memory.total.csv
+
+  iex> Mobius.to_csv("vm.memory.total", %{})
+  # -- writes CSV values to the terminal
+
+  """
+  @spec to_csv(String.t(), map, [csv_opt]) :: :ok
+  def to_csv(metric_name, tags \\ %{}, opts \\ []) do
+    parsed_metric_name = parse_metric_name(metric_name)
+
+    rows =
+      opts
+      |> Keyword.get(:name, :mobius)
+      |> Scraper.all(query_opts(opts))
+      |> Enum.flat_map(fn {timestamp, metrics} ->
+        rows_from_metrics(metrics, parsed_metric_name, tags, timestamp)
+      end)
+
+    tag_names = unique_tag_names(rows)
+
+    headers_row =
+      ["timestamp", "name", "type", "value"] ++
+        for tag_name <- tag_names, do: Atom.to_string(tag_name)
+
+    data_rows = data_rows(rows, metric_name, tag_names)
+
+    csv([headers_row | data_rows], opts)
+  end
+
+  defp unique_tag_names(rows) do
+    Enum.reduce(rows, MapSet.new(), fn row, set ->
+      Enum.reduce(Map.keys(row.tags), set, fn tag_name, acc -> MapSet.put(acc, tag_name) end)
+    end)
+    |> Enum.sort()
+  end
+
+  defp data_rows(rows, metric_name, tag_names) do
+    Enum.reduce(rows, [], fn row, acc ->
+      tag_values = for tag_name <- tag_names, do: "#{Map.get(row.tags, tag_name, "")}"
+
+      data_row =
+        ["#{row.timestamp}", "#{metric_name}", "#{row.type}", "#{row.value}"] ++ tag_values
+
+      acc ++ [data_row]
+    end)
+  end
+
+  defp csv(all_rows, opts) do
+    filepath = csv_file(opts)
+
+    out =
+      if filepath do
+        with :ok <- File.mkdir_p(Path.dirname(filepath)),
+             {:ok, device} <- File.open(filepath, [:write]) do
+          device
+        else
+          {:error, reason} ->
+            IO.puts(
+              "Failed to open file #{inspect(filepath)} to write CSV: #{inspect(reason)}. Writing to terminal instead."
+            )
+
+            :stdio
+        end
+      else
+        :stdio
+      end
+
+    Enum.each(all_rows, fn row -> IO.write(out, [Enum.intersperse(row, ","), "\n"]) end)
+    :ok
+  end
+
+  defp csv_file(opts) do
+    case Keyword.get(opts, :file) do
+      path when is_binary(path) ->
+        dir = Path.dirname(path)
+
+        file =
+          path
+          |> Path.split()
+          |> List.last()
+          |> maybe_with_csv_ext(opts)
+          |> maybe_with_timestamp(opts)
+
+        final_path = Path.join(dir, file)
+        IO.puts("[Mobius] Writing CSV to #{final_path}")
+        final_path
+
+      _ ->
+        nil
+    end
+  end
+
+  defp maybe_with_csv_ext(path, opts) do
+    add_csv_ext? = :csv_ext in Keyword.get(opts, :naming, [])
+
+    if add_csv_ext? and not String.ends_with?(path, ".csv") do
+      path <> ".csv"
+    else
+      path
+    end
+  end
+
+  defp maybe_with_timestamp(path, opts) do
+    if :timestamp in Keyword.get(opts, :naming, []) do
+      [ts | _] = DateTime.utc_now() |> DateTime.to_iso8601(:basic) |> String.split(".")
+      ts <> "_" <> path
+    else
+      path
+    end
+  end
+
   defp series_for_metric_from_metrics(metrics, metric_name, tags) do
     Enum.reduce(metrics, [], fn
       {^metric_name, _type, value, ^tags}, ms ->
@@ -210,6 +356,22 @@ defmodule Mobius do
 
       _, ms ->
         ms
+    end)
+  end
+
+  defp rows_from_metrics(metrics, metric_name, tags, timestamp) do
+    Enum.reduce(metrics, [], fn
+      {^metric_name, type, value, metric_tags}, rows ->
+        if match?(^tags, metric_tags) do
+          row = %{type: type, value: value, tags: metric_tags, timestamp: timestamp}
+
+          rows ++ [row]
+        else
+          rows
+        end
+
+      _metric, rows ->
+        rows
     end)
   end
 
