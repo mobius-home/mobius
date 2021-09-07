@@ -2,7 +2,9 @@ defmodule Mobius.Registry do
   @moduledoc false
 
   use GenServer
+  require Logger
 
+  alias Mobius.MetricsTable
   alias Telemetry.Metrics
 
   @typedoc """
@@ -45,7 +47,8 @@ defmodule Mobius.Registry do
   def init(args) do
     registered = register_metrics(args)
 
-    {:ok, %{registered: registered, metrics: Keyword.fetch!(args, :metrics)}}
+    {:ok, %{registered: registered, metrics: Keyword.fetch!(args, :metrics), table: args[:name]},
+     {:continue, :update_metrics_table}}
   end
 
   defp register_metrics(args) do
@@ -66,4 +69,29 @@ defmodule Mobius.Registry do
   def handle_call(:metrics, _from, state) do
     {:reply, state.metrics, state}
   end
+
+  @impl GenServer
+  def handle_continue(:update_metrics_table, state) do
+    state.table
+    |> MetricsTable.get_entries()
+    |> Enum.each(&maybe_remove_entry(&1, state))
+
+    {:noreply, state}
+  end
+
+  defp maybe_remove_entry({metric_name, metric_type, _value, meta}, state) do
+    metric_specs = Enum.map(state.metrics, &{&1.name, metric_as_type(&1), &1.tags})
+    entry_spec = {metric_name, metric_type, Map.keys(meta)}
+
+    if !Enum.member?(metric_specs, entry_spec) do
+      Logger.debug(
+        "Mobius: not tracking #{inspect(entry_spec)} as it was is not in the metrics list provided to mobius"
+      )
+
+      MetricsTable.remove(state.table, metric_name, metric_type, meta)
+    end
+  end
+
+  defp metric_as_type(%Metrics.Counter{}), do: :counter
+  defp metric_as_type(%Metrics.LastValue{}), do: :last_value
 end
