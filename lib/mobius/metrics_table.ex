@@ -79,6 +79,18 @@ defmodule Mobius.MetricsTable do
   end
 
   @doc """
+  Remove a metric from the metric table
+  """
+  @spec remove(Mobius.name(), Mobius.metric_name(), Mobius.metric_type(), map()) :: :ok
+  def remove(name, metric_name, type, meta \\ %{}) do
+    key = make_key(metric_name, type, meta)
+
+    true = :ets.delete(name, key)
+
+    :ok
+  end
+
+  @doc """
   Increment a counter metric
   """
   @spec inc_counter(Mobius.name(), Mobius.metric_name(), map()) :: :ok
