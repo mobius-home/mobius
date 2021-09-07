@@ -59,4 +59,18 @@ defmodule Mobius.Metrics.MetricsTableTest do
 
     assert result == [{event_name, :last_value, 765, %{}}]
   end
+
+  test "remove a metric from the metric table", %{table: table} do
+    event_name = "I will be removed"
+    :ok = MetricsTable.put(table, event_name, :last_value, 1000)
+
+    # ensure the metric is saved
+    assert [{event_name, :last_value, 1000, %{}}] ==
+             MetricsTable.get_entries_by_event_name(table, event_name)
+
+    :ok = MetricsTable.remove(table, event_name, :last_value)
+
+    # make sure removed
+    assert [] == MetricsTable.get_entries_by_event_name(table, event_name)
+  end
 end
