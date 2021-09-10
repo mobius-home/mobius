@@ -94,4 +94,5 @@ defmodule Mobius.Registry do
 
   defp metric_as_type(%Metrics.Counter{}), do: :counter
   defp metric_as_type(%Metrics.LastValue{}), do: :last_value
+  defp metric_as_type(%Metrics.Sum{}), do: :sum
 end

@@ -34,7 +34,7 @@ defmodule Mobius do
   """
   @type name() :: atom()
 
-  @type metric_type() :: :counter | :last_value
+  @type metric_type() :: :counter | :last_value | :sum
 
   @type metric_name() :: [atom()]
 
@@ -99,12 +99,15 @@ defmodule Mobius do
     data.
   * `:from` - the unix timestamp, in seconds, to start querying from
   * `:to` - the unix timestamp, in seconds, to stop querying at
+  * `:type` - for metrics that have different types of measurements, you can pass
+    this option to filter which metric type you want to plot
   """
   @type plot_opt() ::
           {:name, Mobius.name()}
           | {:last, integer() | {integer(), time_unit()}}
           | {:from, integer()}
           | {:to, integer()}
+          | {:type, metric_type()}
 
   @doc """
   Plot the metric name to the screen
@@ -150,7 +153,7 @@ defmodule Mobius do
       |> Keyword.get(:name, :mobius)
       |> Scraper.all(scraper_query_opts)
       |> Enum.flat_map(fn {_timestamp, metrics} ->
-        series_for_metric_from_metrics(metrics, parsed_metric_name, tags)
+        series_for_metric_from_metrics(metrics, parsed_metric_name, tags, opts)
       end)
 
     {:ok, plot} = Mobius.Asciichart.plot(series, height: 12)
@@ -349,15 +352,30 @@ defmodule Mobius do
     end
   end
 
-  defp series_for_metric_from_metrics(metrics, metric_name, tags) do
-    Enum.reduce(metrics, [], fn
-      {^metric_name, _type, value, ^tags}, ms ->
-        ms ++ [value]
+  defp series_for_metric_from_metrics(metrics, metric_name, tags, opts) do
+    type = opts[:type]
 
-      _, ms ->
-        ms
+    Enum.reduce(metrics, [], fn
+      metric, ms ->
+        case value_from_metric(metric, metric_name, tags, type) do
+          nil ->
+            ms
+
+          value ->
+            ms ++ [value]
+        end
     end)
   end
+
+  defp value_from_metric({metric_name, _type, value, tags}, metric_name, tags, nil) do
+    value
+  end
+
+  defp value_from_metric({metric_name, type, value, tags}, metric_name, tags, type) do
+    value
+  end
+
+  defp value_from_metric(_metric, _metric_name, _tags, _type), do: nil
 
   defp rows_from_metrics(metrics, metric_name, tags, timestamp) do
     Enum.reduce(metrics, [], fn

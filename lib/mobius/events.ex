@@ -4,7 +4,7 @@ defmodule Mobius.Events do
   alias Mobius.MetricsTable
 
   alias Telemetry.Metrics
-  alias Telemetry.Metrics.{Counter, LastValue}
+  alias Telemetry.Metrics.{Counter, LastValue, Sum}
 
   require Logger
 
@@ -33,6 +33,8 @@ defmodule Mobius.Events do
       try do
         if value = keep?(metric, metadata) && extract_measurement(metric, measurements, metadata) do
           tags = extract_tags(metric, metadata)
+          value = maybe_convert_value(metric, value)
+
           handle_metric(metric, value, tags, config)
         end
       rescue
@@ -52,6 +54,21 @@ defmodule Mobius.Events do
   defp handle_metric(%LastValue{} = metric, value, labels, config) do
     MetricsTable.put(config.table, metric.name, :last_value, value, labels)
   end
+
+  defp handle_metric(%Sum{} = metric, value, labels, config) do
+    MetricsTable.update_sum(config.table, metric.name, value, labels)
+  end
+
+  # See details here: https://hexdocs.pm/telemetry_metrics/Telemetry.Metrics.html#module-converting-units
+  # about time unit conversion
+  defp maybe_convert_value(%Counter{}, value), do: value
+  defp maybe_convert_value(%{unit: :unit}, value), do: value
+  defp maybe_convert_value(%{unit: nil}, value), do: value
+
+  defp maybe_convert_value(%{unit: {from, to}}, value),
+    do: System.convert_time_unit(value, from, to)
+
+  defp maybe_convert_value(%{unit: to}, value), do: System.convert_time_unit(value, :native, to)
 
   defp keep?(%{keep: keep}, metadata) when keep != nil, do: keep.(metadata)
   defp keep?(_metric, _metadata), do: true

@@ -59,13 +59,7 @@ defmodule Mobius.MetricsTable do
   def put(name, event_name, :counter, _value, meta) do
     key = make_key(event_name, :counter, meta)
 
-    # the counter value is located in the second position of the tuple record
-    count_position = 2
-
-    # default value for the counter is 0
-    default_spec = {count_position, 0}
-
-    :ets.update_counter(name, key, {count_position, 1}, default_spec)
+    put_counter_type(name, key, 1)
 
     :ok
   end
@@ -76,6 +70,25 @@ defmodule Mobius.MetricsTable do
     :ets.insert(name, {key, value})
 
     :ok
+  end
+
+  def put(name, metric_name, :sum, value, meta) do
+    key = make_key(metric_name, :sum, meta)
+
+    put_counter_type(name, key, value)
+
+    :ok
+  end
+
+  defp put_counter_type(table, key, incr_value) do
+    position = 2
+
+    update_spec = {position, incr_value}
+    # the default value to add the increment value to if this has not been set
+    # yet
+    default_spec = {position, 0}
+
+    :ets.update_counter(table, key, update_spec, default_spec)
   end
 
   @doc """
@@ -96,6 +109,14 @@ defmodule Mobius.MetricsTable do
   @spec inc_counter(Mobius.name(), Mobius.metric_name(), map()) :: :ok
   def inc_counter(name, event_name, meta \\ %{}) do
     put(name, event_name, :counter, 1, meta)
+  end
+
+  @doc """
+  Update a sum metric type
+  """
+  @spec update_sum(Mobius.name(), Mobius.metric_name(), integer(), map()) :: :ok
+  def update_sum(name, metric_name, value, meta \\ %{}) do
+    put(name, metric_name, :sum, value, meta)
   end
 
   @doc """
