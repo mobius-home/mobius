@@ -73,4 +73,17 @@ defmodule Mobius.Metrics.MetricsTableTest do
     # make sure removed
     assert [] == MetricsTable.get_entries_by_event_name(table, event_name)
   end
+
+  test "update a sum of values", %{table: table} do
+    metric_name = "sum"
+    :ok = MetricsTable.update_sum(table, metric_name, 100)
+
+    assert [{metric_name, :sum, 100, %{}}] ==
+             MetricsTable.get_entries_by_event_name(table, metric_name)
+
+    :ok = MetricsTable.update_sum(table, metric_name, 50)
+
+    assert [{metric_name, :sum, 150, %{}}] ==
+             MetricsTable.get_entries_by_event_name(table, metric_name)
+  end
 end
