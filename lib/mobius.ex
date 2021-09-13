@@ -210,6 +210,13 @@ defmodule Mobius do
           | {:last, integer() | {integer(), time_unit()}}
           | {:from, integer()}
           | {:to, integer()}
+          | {:transforms,
+             [
+               {module, atom}
+               | {module, atom, atom}
+               | {module, atom, list}
+               | {module, atom, atom, list}
+             ]}
 
   @doc """
   Produces a CSV of currently collected metrics, optionally writing the CSV to file.
@@ -229,6 +236,23 @@ defmodule Mobius do
   * `:from` - the unix timestamp, in seconds, to start querying from
   * `:to` - the unix timestamp, in seconds, to stop querying at
 
+  One or more optional transformations can be applied to all rows by providing the option :transforms.
+
+  The :transforms option, if set, contains a list of transformers. Each transformer is applied to all rows or to the rows
+  transformed by the application of the previous transformer.
+
+  A transformer is a tuple with
+  * the name of a module
+  * the name of a row-transform function from the above module
+  * optional - the name of a context function that computes some global data to be made available to all row transformations,
+  * optional - a list of extra arguments to be passed to the row-transform function.
+
+  The row-transform function receives a row, the index of that row, the context as keyword list (or nil if none), and extra arguments
+  (possibly an empty list). It returns a modified row.
+
+  The context function receives all rows and the extra arguments as parameters. It returns a keywork list that will be passed to the
+  row-transform function.
+
   Examples:
 
   iex> Mobius.to_csv("vm.memory.total", %{})
@@ -240,8 +264,11 @@ defmodule Mobius do
   iex> Mobius.to_csv("vm.memory.total", %{}, file: "/data/csv/vm.memory.total", naming: [:csv_ext, :timestamp])
   # -- writes CSV values to a file like 20210830T174954_vm.memory.total.csv
 
-  iex> Mobius.to_csv("vm.memory.total", %{})
-  # -- writes CSV values to the terminal
+  # -- writes CSV values to the terminal after transformations
+  iex> Mobius.to_csv("vm.memory.total", %{}, transforms: [{Mobius.Transforms, :add_date_time}])
+  iex> Mobius.to_csv("vm.memory.total", %{}, transforms: [{Mobius.Transforms, :add_delta, :find_maximum, [label: "over max", column: 3, name_maximum: :base]}])
+  iex> Mobius.to_csv("vm.memory.total", %{}, transforms: [{Mobius.Transforms, :add_delta, :find_maximum, [label: "over max", column: 3, name_maximum: :base]}, {Mobius.Transforms, :add_date_time}])
+
 
   """
   @spec to_csv(String.t(), map, [csv_opt]) :: :ok
@@ -305,8 +332,44 @@ defmodule Mobius do
         :stdio
       end
 
-    Enum.each(all_rows, fn row -> IO.write(out, [Enum.intersperse(row, ","), "\n"]) end)
+    all_rows
+    |> apply_transforms(opts)
+    |> Enum.each(fn row ->
+      IO.write(out, [Enum.intersperse(row, ","), "\n"])
+    end)
+
     :ok
+  end
+
+  defp apply_transforms(rows, opts) do
+    Keyword.get(opts, :transforms, [])
+    |> Enum.reduce(
+      rows,
+      fn transform, rows -> apply_transform(transform, rows) end
+    )
+  end
+
+  defp apply_transform({module, row_function}, rows),
+    do: apply_transform({module, row_function, nil, []}, rows)
+
+  defp apply_transform({module, row_function, context_function}, rows)
+       when is_atom(context_function),
+       do: apply_transform({module, row_function, context_function, []}, rows)
+
+  defp apply_transform({module, row_function, extra_args}, rows)
+       when is_list(extra_args),
+       do: apply_transform({module, row_function, nil, extra_args}, rows)
+
+  defp apply_transform({module, row_function, context_function, extra_args}, rows) do
+    context =
+      if context_function != nil,
+        do: apply(module, context_function, [rows, extra_args]),
+        else: nil
+
+    Enum.with_index(rows)
+    |> Enum.map(fn {row, index} ->
+      apply(module, row_function, [row, index, context, extra_args])
+    end)
   end
 
   defp csv_file(opts) do
