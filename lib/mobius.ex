@@ -232,6 +232,8 @@ defmodule Mobius do
   * `:from` - the unix timestamp, in seconds, to start querying from
   * `:to` - the unix timestamp, in seconds, to stop querying at
 
+  If a metric has multiple types, a CSV can filter on one type with option `type: :sum` or `type: :last_value` etc..
+
   Examples:
 
   iex> Mobius.to_csv("vm.memory.total", %{})
@@ -246,6 +248,9 @@ defmodule Mobius do
   iex> Mobius.to_csv("vm.memory.total", %{})
   # -- writes CSV values to the terminal
 
+  iex> Mobius.to_csv("vintage_net_qmi.connection.end.duration", %{ifname: "wwan0", status: :disconnected}, type: :sum, last: {60, :day})
+  # -- writes CSV values to the terminal
+
   """
   @spec to_csv(String.t(), map, [csv_opt]) :: :ok
   def to_csv(metric_name, tags \\ %{}, opts \\ []) do
@@ -256,7 +261,7 @@ defmodule Mobius do
       |> Keyword.get(:name, :mobius)
       |> Scraper.all(query_opts(opts))
       |> Enum.flat_map(fn {timestamp, metrics} ->
-        rows_from_metrics(metrics, parsed_metric_name, tags, timestamp)
+        rows_from_metrics(metrics, parsed_metric_name, tags, timestamp, opts)
       end)
 
     tag_names = unique_tag_names(rows)
@@ -377,10 +382,12 @@ defmodule Mobius do
 
   defp value_from_metric(_metric, _metric_name, _tags, _type), do: nil
 
-  defp rows_from_metrics(metrics, metric_name, tags, timestamp) do
+  defp rows_from_metrics(metrics, metric_name, tags, timestamp, opts) do
+    required_type = Keyword.get(opts, :type)
+
     Enum.reduce(metrics, [], fn
       {^metric_name, type, value, metric_tags}, rows ->
-        if match?(^tags, metric_tags) do
+        if match?(^tags, metric_tags) and matches_type?(type, required_type) do
           row = %{type: type, value: value, tags: metric_tags, timestamp: timestamp}
 
           rows ++ [row]
@@ -392,6 +399,11 @@ defmodule Mobius do
         rows
     end)
   end
+
+  defp matches_type?(_type, nil), do: true
+
+  defp matches_type?(type, type), do: true
+  defp matches_type?(_, _), do: false
 
   defp parse_metric_name(metric_name),
     do: metric_name |> String.split(".", trim: true) |> Enum.map(&String.to_existing_atom/1)
