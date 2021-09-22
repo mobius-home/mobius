@@ -9,7 +9,7 @@ Library for localized telemetry metrics
 ```elixir
 def deps do
   [
-    {:mobius, "~> 0.3.1"}
+    {:mobius, "~> 0.3.2"}
   ]
 end
 ```
