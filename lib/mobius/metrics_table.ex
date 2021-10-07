@@ -10,9 +10,10 @@ defmodule Mobius.MetricsTable do
   # {name, type, value, meta}
 
   @typedoc """
-  The structure of how metric information from the metrics table
+  A single entry of a metric in the metric table
   """
-  @type metric_entry() :: {:telemetry.event_name(), Mobius.metric_type(), integer(), map()}
+  @type metric_entry() ::
+          {Telemetry.Metrics.metric_name(), Mobius.metric_type(), integer(), map()}
 
   @doc """
   Initialize the metrics table
