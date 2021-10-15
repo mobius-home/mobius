@@ -74,7 +74,7 @@ defmodule Mobius do
   end
 
   defp ensure_mobius_persistence_dir(persistence_path) do
-    case File.mkdir(persistence_path) do
+    case File.mkdir_p(persistence_path) do
       :ok ->
         :ok
 
