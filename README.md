@@ -60,7 +60,7 @@ children = [
 Mobius tracks metrics overtime in a circular buffer and allows you to graph
 metric values over time using `Mobius.Charts.plot/3`:
 
-```
+``` elixir
 iex> Mobius.Charts.plot("vm.memory.total")
                 Metric Name: vm.memory.total, Tags: %{}
 
@@ -79,17 +79,74 @@ iex> Mobius.Charts.plot("vm.memory.total")
 
 ### Printing current metrics
 
-To see the current metrics you can use `Mobius.Charts.info/0`:
+To see the current metrics you can use `Mobius.info/0`:
 
-```
-iex> Mobius.Charts.info()
-Event: vintage_net_qmi.connection.end.duration
-Tags: %{ifname: "wwan0", status: :lan}
-counter: 4
-last_value: 310000
+``` elixir
+iex> Mobius.info()
 
-Event: vm.memory.total
+Metric Name: vintage_net_qmi.connection.end.duration
+Tags: %{ifname: "wwan0", status: :disconnected}
+sum: 1247
+last_value: 0
+
+Metric Name: vintage_net_qmi.connection.end.duration
+Tags: %{ifname: "wwan0", status: :internet}
+sum: 667037
+last_value: 0
+
+Metric Name: vintage_net_qmi.connection.statistics.rx_bytes
+Tags: %{ifname: "wwan0"}
+last_value: 1829748
+
+Metric Name: vintage_net_qmi.connection.statistics.rx_errors
+Tags: %{ifname: "wwan0"}
+last_value: 0
+
+Metric Name: vintage_net_qmi.connection.statistics.rx_packets
+Tags: %{ifname: "wwan0"}
+last_value: 36125
+
+Metric Name: vintage_net_qmi.connection.statistics.tx_bytes
+Tags: %{ifname: "wwan0"}
+last_value: 3113540
+
+Metric Name: vintage_net_qmi.connection.statistics.tx_errors
+Tags: %{ifname: "wwan0"}
+last_value: 0
+
+Metric Name: vintage_net_qmi.connection.statistics.tx_packets
+Tags: %{ifname: "wwan0"}
+last_value: 61417
+
+Metric Name: vintage_net_qmi.connection.status
+Tags: %{ifname: "wwan0"}
+last_value: 0
+
+Metric Name: vintage_net_qmi.connection.status
+Tags: %{ifname: "wwan0", status: :disconnected}
+counter: 897
+
+Metric Name: vintage_net_qmi.connection.status
+Tags: %{ifname: "wwan0", status: :internet}
+counter: 68
+
+Metric Name: vintage_net_qmi.signal_strength.asu
+Tags: %{ifname: "wwan0"}
+last_value: 99
+
+Metric Name: vintage_net_qmi.signal_strength.bars
+Tags: %{ifname: "wwan0"}
+last_value: 1
+
+Metric Name: vintage_net_qmi.signal_strength.dbm
+Tags: %{ifname: "wwan0"}
+last_value: -128
+
+Metric Name: vintage_net_qmi.signal_strength.rssi
+Tags: %{ifname: "wwan0"}
+last_value: -128
+
+Metric Name: vm.memory.total
 Tags: %{}
-last_value: 34674312
+last_value: 83952736
 ```
-
