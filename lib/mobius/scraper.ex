@@ -72,12 +72,16 @@ defmodule Mobius.Scraper do
   end
 
   defp load_history(tlb, state) do
-    case File.read(file(state)) do
+    with {:ok, contents} <- File.read(file(state)),
+         {:ok, tlb} <- History.load(tlb, contents) do
+      tlb
+    else
       {:error, :enoent} ->
         tlb
 
-      {:ok, contents} ->
-        {:ok, tlb} = History.load(tlb, contents)
+      error ->
+        Logger.warn("Error reading history file because #{inspect(error)}, ignoring")
+
         tlb
     end
   end
