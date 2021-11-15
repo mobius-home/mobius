@@ -9,7 +9,7 @@ Library for localized telemetry metrics
 ```elixir
 def deps do
   [
-    {:mobius, "~> 0.3.3"}
+    {:mobius, "~> 0.3.4"}
   ]
 end
 ```
@@ -60,7 +60,7 @@ children = [
 Mobius tracks metrics overtime in a circular buffer and allows you to graph
 metric values over time using `Mobius.Charts.plot/3`:
 
-``` elixir
+```elixir
 iex> Mobius.Charts.plot("vm.memory.total")
                 Metric Name: vm.memory.total, Tags: %{}
 
@@ -81,7 +81,7 @@ iex> Mobius.Charts.plot("vm.memory.total")
 
 To see the current metrics you can use `Mobius.info/0`:
 
-``` elixir
+```elixir
 iex> Mobius.info()
 
 Metric Name: vintage_net_qmi.connection.end.duration
