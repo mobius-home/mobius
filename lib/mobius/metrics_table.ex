@@ -15,6 +15,8 @@ defmodule Mobius.MetricsTable do
   @type metric_entry() ::
           {Telemetry.Metrics.metric_name(), Mobius.metric_type(), integer(), map()}
 
+  require Logger
+
   @doc """
   Initialize the metrics table
   """
@@ -24,7 +26,8 @@ defmodule Mobius.MetricsTable do
       {:ok, table} ->
         table
 
-      {:error, :enoent} ->
+      {:error, reason} ->
+        Logger.warn("[Mobius] Could not recover metrics from file because #{inspect(reason)}")
         :ets.new(args[:name], [:named_table, :public, :set])
     end
   end
