@@ -4,6 +4,12 @@
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0v.3.5] - 2021-12-2
+
+### Fixes
+
+- Fix crash when initializing metrics table when the ETS file cannot be read (@jfcloutier)
+
 ## [v0.3.4] - 2021-11-15
 
 ### Fixes
@@ -65,7 +71,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Initial release!
 
-[v0.3.3]: https://github.com/mattludwigs/mobius/compare/v0.3.3...v0.3.4
+[v0.3.5]: https://github.com/mattludwigs/mobius/compare/v0.3.4...v0.3.5
+[v0.3.4]: https://github.com/mattludwigs/mobius/compare/v0.3.3...v0.3.4
 [v0.3.3]: https://github.com/mattludwigs/mobius/compare/v0.3.2...v0.3.3
 [v0.3.2]: https://github.com/mattludwigs/mobius/compare/v0.3.1...v0.3.2
 [v0.3.1]: https://github.com/mattludwigs/mobius/compare/v0.3.0...v0.3.1
