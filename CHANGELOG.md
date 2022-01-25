@@ -4,7 +4,13 @@
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0v.3.5] - 2021-12-2
+## [v0.3.6] - 2022-01-25
+
+### Added
+
+- Support for `Telemetry.Metrics.Summary` metric type
+
+## [v0.3.5] - 2021-12-2
 
 ### Fixes
 
@@ -71,6 +77,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Initial release!
 
+[v0.3.6]: https://github.com/mattludwigs/mobius/compare/v0.3.5...v0.3.6
 [v0.3.5]: https://github.com/mattludwigs/mobius/compare/v0.3.4...v0.3.5
 [v0.3.4]: https://github.com/mattludwigs/mobius/compare/v0.3.3...v0.3.4
 [v0.3.3]: https://github.com/mattludwigs/mobius/compare/v0.3.2...v0.3.3
