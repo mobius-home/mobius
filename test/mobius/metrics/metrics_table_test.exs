@@ -86,4 +86,17 @@ defmodule Mobius.Metrics.MetricsTableTest do
     assert [{metric_name, :sum, 150, %{}}] ==
              MetricsTable.get_entries_by_event_name(table, metric_name)
   end
+
+  test "handle summary telemetry", %{table: table} do
+    metric_name = "summary"
+    :ok = MetricsTable.put(table, metric_name, :summary, 100)
+
+    assert [{^metric_name, :summary, %{accumulated: 100, max: 100, min: 100, reports: 1}, %{}}] =
+             MetricsTable.get_entries_by_event_name(table, metric_name)
+
+    :ok = MetricsTable.put(table, metric_name, :summary, 120)
+
+    assert [{^metric_name, :summary, %{accumulated: 220, max: 120, min: 100, reports: 2}, %{}}] =
+             MetricsTable.get_entries_by_event_name(table, metric_name)
+  end
 end
