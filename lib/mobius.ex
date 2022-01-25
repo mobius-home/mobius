@@ -5,7 +5,7 @@ defmodule Mobius do
 
   use Supervisor
 
-  alias Mobius.{MetricsTable, Scraper}
+  alias Mobius.{MetricsTable, Scraper, Summary}
 
   alias Telemetry.Metrics
 
@@ -34,7 +34,7 @@ defmodule Mobius do
   """
   @type name() :: atom()
 
-  @type metric_type() :: :counter | :last_value | :sum
+  @type metric_type() :: :counter | :last_value | :sum | :summary
 
   @type metric_name() :: [atom()]
 
@@ -287,7 +287,13 @@ defmodule Mobius do
       tag_values = for tag_name <- tag_names, do: "#{Map.get(row.tags, tag_name, "")}"
 
       data_row =
-        ["#{row.timestamp}", "#{metric_name}", "#{row.type}", "#{row.value}"] ++ tag_values
+        [
+          "#{row.timestamp}",
+          "#{metric_name}",
+          "#{row.type}",
+          "#{inspect(format_value(row.type, row.value))}"
+        ] ++
+          tag_values
 
       acc ++ [data_row]
     end)
@@ -424,7 +430,7 @@ defmodule Mobius do
     |> Enum.each(fn {{event_name, meta}, metrics} ->
       reports =
         Enum.map(metrics, fn {_event_name, type, value, _meta} ->
-          "#{to_string(type)}: #{inspect(value)}\n"
+          "#{to_string(type)}: #{inspect(format_value(type, value))}\n"
         end)
 
       [
@@ -436,5 +442,13 @@ defmodule Mobius do
       ]
       |> IO.puts()
     end)
+  end
+
+  defp format_value(:summary, summary_data) do
+    Summary.calculate(summary_data)
+  end
+
+  defp format_value(_, value) do
+    value
   end
 end

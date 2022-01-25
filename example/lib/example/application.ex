@@ -12,8 +12,8 @@ defmodule Example.Application do
     metrics = [
       Metrics.counter("example.inc.count", tags: [:ifname]),
       Metrics.last_value("example.inc.duration", tags: [:ifname]),
-
-      Metrics.last_value("vm.memory.total")
+      Metrics.last_value("vm.memory.total"),
+      Metrics.summary("vm.memory.total")
     ]
 
     children = [

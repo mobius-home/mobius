@@ -4,7 +4,7 @@ defmodule Mobius.Events do
   alias Mobius.MetricsTable
 
   alias Telemetry.Metrics
-  alias Telemetry.Metrics.{Counter, LastValue, Sum}
+  alias Telemetry.Metrics.{Counter, LastValue, Sum, Summary}
 
   require Logger
 
@@ -57,6 +57,10 @@ defmodule Mobius.Events do
 
   defp handle_metric(%Sum{} = metric, value, labels, config) do
     MetricsTable.update_sum(config.table, metric.name, value, labels)
+  end
+
+  defp handle_metric(%Summary{} = metric, value, labels, config) do
+    MetricsTable.put(config.table, metric.name, :summary, value, labels)
   end
 
   # See details here: https://hexdocs.pm/telemetry_metrics/Telemetry.Metrics.html#module-converting-units

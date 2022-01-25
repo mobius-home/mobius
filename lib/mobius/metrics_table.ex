@@ -17,6 +17,8 @@ defmodule Mobius.MetricsTable do
 
   require Logger
 
+  alias Mobius.Summary
+
   @doc """
   Initialize the metrics table
   """
@@ -80,6 +82,20 @@ defmodule Mobius.MetricsTable do
     key = make_key(metric_name, :sum, meta)
 
     put_counter_type(name, key, value)
+
+    :ok
+  end
+
+  def put(name, metric_name, :summary, value, meta) do
+    key = make_key(metric_name, :summary, meta)
+
+    summary =
+      case :ets.lookup(name, key) do
+        [{^key, last_summary}] -> Summary.update(last_summary, value)
+        [] -> Summary.new(value)
+      end
+
+    :ets.insert(name, {key, summary})
 
     :ok
   end
