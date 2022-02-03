@@ -156,23 +156,27 @@ defmodule Mobius do
         series_for_metric_from_metrics(metrics, parsed_metric_name, tags, opts)
       end)
 
-    {:ok, plot} = Mobius.Asciichart.plot(series, height: 12)
+    case Mobius.Asciichart.plot(series, height: 12) do
+      {:ok, plot} ->
+        chart = [
+          "\t\t",
+          IO.ANSI.yellow(),
+          "Metric Name: ",
+          metric_name,
+          IO.ANSI.reset(),
+          ", ",
+          IO.ANSI.cyan(),
+          "Tags: #{inspect(tags)}",
+          IO.ANSI.reset(),
+          "\n\n",
+          plot
+        ]
 
-    chart = [
-      "\t\t",
-      IO.ANSI.yellow(),
-      "Metric Name: ",
-      metric_name,
-      IO.ANSI.reset(),
-      ", ",
-      IO.ANSI.cyan(),
-      "Tags: #{inspect(tags)}",
-      IO.ANSI.reset(),
-      "\n\n",
-      plot
-    ]
+        IO.puts(chart)
 
-    IO.puts(chart)
+      {:error, _} = error ->
+        error
+    end
   end
 
   def query_opts(opts) do
