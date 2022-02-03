@@ -48,25 +48,33 @@ defmodule Mobius do
   @impl Supervisor
   def init(args) do
     mobius_persistence_path = Path.join(args[:persistence_dir], to_string(args[:name]))
-    :ok = ensure_mobius_persistence_dir(mobius_persistence_path)
 
-    args =
-      args
-      |> Keyword.put(:persistence_dir, mobius_persistence_path)
-      |> Keyword.put_new(:day_count, 60)
-      |> Keyword.put_new(:hour_count, 48)
-      |> Keyword.put_new(:minute_count, 120)
-      |> Keyword.put_new(:second_count, 120)
+    case ensure_mobius_persistence_dir(mobius_persistence_path) do
+      :ok ->
+        args =
+          args
+          |> Keyword.put(:persistence_dir, mobius_persistence_path)
+          |> Keyword.put_new(:day_count, 60)
+          |> Keyword.put_new(:hour_count, 48)
+          |> Keyword.put_new(:minute_count, 120)
+          |> Keyword.put_new(:second_count, 120)
 
-    MetricsTable.init(args)
+        MetricsTable.init(args)
 
-    children = [
-      {Mobius.MetricsTable.Monitor, args},
-      {Mobius.Registry, args},
-      {Mobius.Scraper, args}
-    ]
+        children = [
+          {Mobius.MetricsTable.Monitor, args},
+          {Mobius.Registry, args},
+          {Mobius.Scraper, args}
+        ]
 
-    Supervisor.init(children, strategy: :one_for_one)
+        Supervisor.init(children, strategy: :one_for_one)
+
+      {:error, :enoent} ->
+        raise("persistence_path does not exist: #{mobius_persistence_path}")
+
+      {:error, msg} ->
+        raise("could not start mobius: #{msg}")
+    end
   end
 
   defp ensure_args(args) do
