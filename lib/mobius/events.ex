@@ -31,11 +31,12 @@ defmodule Mobius.Events do
   def handle(_event, measurements, metadata, config) do
     for metric <- config.metrics do
       try do
-        if value = keep?(metric, metadata) && extract_measurement(metric, measurements, metadata) do
-          tags = extract_tags(metric, metadata)
-          value = maybe_convert_value(metric, value)
+        measurement = extract_measurement(metric, measurements, metadata)
 
-          handle_metric(metric, value, tags, config)
+        if !is_nil(measurement) and keep?(metric, metadata) do
+          tags = extract_tags(metric, metadata)
+
+          handle_metric(metric, measurement, tags, config)
         end
       rescue
         e ->
@@ -47,6 +48,7 @@ defmodule Mobius.Events do
     :ok
   end
 
+  # Counter only ever increments by one, regardless of metric value
   defp handle_metric(%Counter{} = metric, _value, labels, config) do
     MetricsTable.inc_counter(config.table, metric.name, labels)
   end
@@ -63,29 +65,14 @@ defmodule Mobius.Events do
     MetricsTable.put(config.table, metric.name, :summary, value, labels)
   end
 
-  # See details here: https://hexdocs.pm/telemetry_metrics/Telemetry.Metrics.html#module-converting-units
-  # about time unit conversion
-  defp maybe_convert_value(%Counter{}, value), do: value
-  defp maybe_convert_value(%{unit: :unit}, value), do: value
-  defp maybe_convert_value(%{unit: nil}, value), do: value
-
-  defp maybe_convert_value(%{unit: {from, to}}, value),
-    do: System.convert_time_unit(value, from, to)
-
-  defp maybe_convert_value(%{unit: to}, value), do: System.convert_time_unit(value, :native, to)
-
-  defp keep?(%{keep: keep}, metadata) when keep != nil, do: keep.(metadata)
-  defp keep?(_metric, _metadata), do: true
+  defp keep?(%{keep: nil}, _metadata), do: true
+  defp keep?(metric, metadata), do: metric.keep.(metadata)
 
   defp extract_measurement(%Counter{}, _measurements, _metadata) do
     1
   end
 
   defp extract_measurement(metric, measurements, metadata) do
-    get_measurement(metric, measurements, metadata)
-  end
-
-  defp get_measurement(metric, measurements, metadata) do
     case metric.measurement do
       fun when is_function(fun, 1) -> fun.(measurements)
       fun when is_function(fun, 2) -> fun.(measurements, metadata)
