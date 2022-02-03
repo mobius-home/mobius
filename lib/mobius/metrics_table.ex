@@ -28,6 +28,10 @@ defmodule Mobius.MetricsTable do
       {:ok, table} ->
         table
 
+      {:error, :enoent} ->
+        # Metrics save file doesn't (yet) exist
+        :ets.new(args[:name], [:named_table, :public, :set])
+
       {:error, reason} ->
         Logger.warn("[Mobius] Could not recover metrics from file because #{inspect(reason)}")
         :ets.new(args[:name], [:named_table, :public, :set])
