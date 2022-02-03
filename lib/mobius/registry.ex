@@ -84,10 +84,6 @@ defmodule Mobius.Registry do
     entry_spec = {metric_name, metric_type, Map.keys(meta)}
 
     if !Enum.member?(metric_specs, entry_spec) do
-      Logger.debug(
-        "Mobius: not tracking #{inspect(entry_spec)} as it was is not in the metrics list provided to mobius"
-      )
-
       MetricsTable.remove(state.table, metric_name, metric_type, meta)
     end
   end
