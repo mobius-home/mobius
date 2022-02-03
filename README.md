@@ -50,18 +50,24 @@ data in a different location you can pass that into Mobius when you start it:
 
 children = [
    # ... other children ...
-   {Mobius, metrics: metrics, persistence_dir: "/tmp"}
+   {Mobius, metrics: metrics(), persistence_dir: "/tmp"}
    # ... other children ...
 ]
+
+def metrics() do
+  [
+    Metrics.last_value("vm.memory.total", unit: {:byte, :kilobyte})
+  ]
+end
 ```
 
 ### Charting historical metrics
 
 Mobius tracks metrics overtime in a circular buffer and allows you to graph
-metric values over time using `Mobius.Charts.plot/3`:
+metric values over time using `Mobius.plot/3`:
 
 ```elixir
-iex> Mobius.Charts.plot("vm.memory.total")
+iex> Mobius.plot("vm.memory.total")
                 Metric Name: vm.memory.total, Tags: %{}
 
 34355808.00 ┤
