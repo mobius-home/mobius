@@ -43,6 +43,12 @@ defmodule Mobius.Scraper do
     GenServer.call(name(name), {:get, opts})
   end
 
+  @doc """
+  Persist the metrics to disk
+  """
+  @spec save(Mobius.name()) :: :ok | {:error, reason :: term()}
+  def save(name), do: GenServer.call(name(name), :save)
+
   @impl GenServer
   def init(args) do
     _ = :timer.send_interval(@interval, self(), :scrape)
@@ -101,6 +107,10 @@ defmodule Mobius.Scraper do
     end
   end
 
+  def handle_call(:save, _from, state) do
+    {:reply, save_to_persistence(state), state}
+  end
+
   defp query_history(from, state, opts) do
     case opts[:to] do
       nil ->
@@ -131,6 +141,11 @@ defmodule Mobius.Scraper do
 
   @impl GenServer
   def terminate(_reason, state) do
+    save_to_persistence(state)
+  end
+
+  # Write our history to persistent storage
+  defp save_to_persistence(state) do
     contents = History.save(state.history)
 
     case File.write(file(state), contents) do
