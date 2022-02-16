@@ -22,10 +22,10 @@ defmodule Mobius.Registry do
   def start_link(args) do
     ensure_metrics(args)
 
-    GenServer.start_link(__MODULE__, args, name: gen_server_name(args[:name]))
+    GenServer.start_link(__MODULE__, args, name: name(args[:name]))
   end
 
-  defp gen_server_name(mobius_name) do
+  defp name(mobius_name) do
     Module.concat(__MODULE__, mobius_name)
   end
 
@@ -38,9 +38,7 @@ defmodule Mobius.Registry do
   """
   @spec metrics(Mobius.name()) :: [Metrics.t()]
   def metrics(name) do
-    name
-    |> gen_server_name()
-    |> GenServer.call(:metrics)
+    GenServer.call(name(name), :metrics)
   end
 
   @impl GenServer

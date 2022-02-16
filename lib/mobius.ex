@@ -9,7 +9,7 @@ defmodule Mobius do
 
   alias Telemetry.Metrics
 
-  @default_args [name: :mobius, persistence_dir: "/data"]
+  @default_args [name: :mobius, persistence_dir: "/data", autosave_interval: nil]
 
   @type time_unit() :: :second | :minute | :hour | :day
 
@@ -19,6 +19,7 @@ defmodule Mobius do
   * `:name` - the name of the mobius instance (defaults to `:mobius`)
   * `:metrics` - list of telemetry metrics for Mobius to track
   * `:persistence_dir` - the top level directory where mobius will persist
+  * `:autosave_interval` - time in seconds between automatic writes of the persistence data (default disabled)
     metric information
   * `:day_count` - number of day-granularity samples to keep
   * `:hour_count` - number of hour-granularity samples to keep
@@ -61,11 +62,13 @@ defmodule Mobius do
 
         MetricsTable.init(args)
 
-        children = [
-          {Mobius.MetricsTable.Monitor, args},
-          {Mobius.Registry, args},
-          {Mobius.Scraper, args}
-        ]
+        children =
+          [
+            {Mobius.MetricsTable.Monitor, args},
+            {Mobius.Registry, args},
+            {Mobius.Scraper, args}
+          ]
+          |> maybe_enable_autosave(args)
 
         Supervisor.init(children, strategy: :one_for_one)
 
@@ -91,6 +94,14 @@ defmodule Mobius do
 
       error ->
         error
+    end
+  end
+
+  defp maybe_enable_autosave(children, args) do
+    if is_number(args[:autosave_interval]) and args[:autosave_interval] > 0 do
+      children ++ [{Mobius.AutoSave, args}]
+    else
+      children
     end
   end
 
@@ -433,9 +444,7 @@ defmodule Mobius do
   custom name to ensure Mobius requests the metrics from the right place.
   """
   @spec info(Mobius.name() | nil) :: :ok
-  def info(name \\ nil) do
-    name = name || :mobius
-
+  def info(name \\ @default_args[:name]) do
     name
     |> MetricsTable.get_entries()
     |> Enum.group_by(fn {event_name, _type, _value, meta} -> {event_name, meta} end)
@@ -462,5 +471,34 @@ defmodule Mobius do
 
   defp format_value(_, value) do
     value
+  end
+
+  @doc """
+  Persist the metrics to disk
+  """
+  @spec save(Mobius.name()) :: :ok | {:error, reason :: term()}
+  def save(name \\ @default_args[:name]) do
+    start_t = System.monotonic_time()
+    prefix = [:mobius, :save]
+    :telemetry.execute(prefix ++ [:start], %{system_time: System.system_time()}, %{name: name})
+
+    with :ok <- Scraper.save(name),
+         :ok <- MetricsTable.Monitor.save(name) do
+      duration = System.monotonic_time() - start_t
+      :telemetry.execute(prefix ++ [:stop], %{duration: duration}, %{name: name})
+
+      :ok
+    else
+      error ->
+        duration = System.monotonic_time() - start_t
+
+        :telemetry.execute(
+          prefix ++ [:exception],
+          %{reason: inspect(error), duration: duration},
+          %{name: name}
+        )
+
+        error
+    end
   end
 end

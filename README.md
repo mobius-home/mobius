@@ -61,6 +61,15 @@ def metrics() do
 end
 ```
 
+### Saving / Autosaving metrics data
+
+By default the metrics data is persisted on a normal shutdown. However, data will not
+be persisted during a sudden shutdown, eg Control-C in IEX, kill, sudden power off
+
+It's possible to manually call Mobius.save/1 to force an interim write of the persistence data.
+
+This can be automated by passing `autosave_interval` to Mobius
+
 ### Charting historical metrics
 
 Mobius tracks metrics overtime in a circular buffer and allows you to graph
