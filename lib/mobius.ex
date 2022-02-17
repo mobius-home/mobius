@@ -115,7 +115,7 @@ defmodule Mobius do
   If there are tags for the metric you can pass those in the second argument:
 
   ```elixir
-  Mobius.Charts.plot("vm.memory.total", %{some: :tag})
+  Mobius.plot("vm.memory.total", %{some: :tag})
   ```
 
   By default the plot will display the last 3 minutes of metric history.
