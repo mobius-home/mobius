@@ -39,6 +39,46 @@ defmodule Mobius do
 
   @type metric_name() :: [atom()]
 
+  @typedoc """
+  Options to use when fitering time series metric data
+
+  * `:name` - the name of the Mobius instance you are using. Unless you
+    specified this in your configuration you should be safe to allow this
+    option to default, which is `:mobius_metrics`.
+  * `:last` - display data point that have been captured over the last `x`
+    amount of time. Where `x` is either an integer or a tuple of
+    `{integer(), time_unit()}`. If you only pass an integer the time unit of
+    `:seconds` is assumed. By default Mobius will plot the last 3 minutes of
+    data.
+  * `:from` - the unix timestamp, in seconds, to start querying from
+  * `:to` - the unix timestamp, in seconds, to stop querying at
+  * `:type` - for metrics that have different types of measurements, you can pass
+    this option to filter which metric type you want to plot
+  """
+  @type filter_opt() ::
+          {:name, Mobius.name()}
+          | {:last, integer() | {integer(), time_unit()}}
+          | {:from, integer()}
+          | {:to, integer()}
+          | {:type, metric_type()}
+
+  @typedoc """
+  Options for our plot export
+  """
+  @type plot_opt() :: filter_opt()
+
+  @type naming_opt :: :csv_ext | :timestamp
+
+  @typedoc """
+  Options for our CSV export
+  """
+  @type csv_opt() ::
+          {:file, String.t()}
+          | {:naming, [naming_opt]}
+          | filter_opt()
+
+  @type metric() :: %{type: metric_type(), value: term(), tags: map(), timestamp: integer()}
+
   @doc """
   Start Mobius
   """
@@ -105,31 +145,83 @@ defmodule Mobius do
     end
   end
 
-  @typedoc """
-  Options to use when plotting time series metric data
+  @doc """
+  Retrieve the raw metric data from the history store for a given metric.
 
-  * `:name` - the name of the Mobius instance you are using. Unless you
-    specified this in your configuration you should be safe to allow this
-    option to default, which is `:mobius_metrics`.
-  * `:last` - display data point that have been captured over the last `x`
-    amount of time. Where `x` is either an integer or a tuple of
-    `{integer(), time_unit()}`. If you only pass an integer the time unit of
-    `:seconds` is assumed. By default Mobius will plot the last 3 minutes of
-    data.
-  * `:from` - the unix timestamp, in seconds, to start querying from
-  * `:to` - the unix timestamp, in seconds, to stop querying at
-  * `:type` - for metrics that have different types of measurements, you can pass
-    this option to filter which metric type you want to plot
+  Output will be a list of metric values, which will be in the format, eg:
+    %{type: :last_value, value: 12, tags: %{interface: "eth0"}, timestamp: 1645107424}
+
+    If there are tags for the metric you can pass those in the second argument:
+
+  ```elixir
+  Mobius.filter_metrics("vm.memory.total", %{some: :tag})
+  ```
+
+  By default the filter will display the last 3 minutes of metric history.
+
+  However, you can pass the `:from` and `:to` options to look at a specific
+  range of time.
+
+  ```elixir
+  Mobius.filter_metrics("vm.memory.total", %{}, from: 1630619212, to: 1630619219)
+  ```
+
+  You can also filter data over the last `x` amount of time. Where x is an
+  integer. When there is no `time_unit()` provided the unit is assumed to be
+  `:second`.
+
+  Retrieving data over the last 30 seconds:
+
+  ```elixir
+  Mobius.filter_metrics("vm.memory.total", %{}, last: 30)
+  ```
+
+  Retrieving data over the last 2 hours:
+
+  ```elixir
+  Mobius.filter_metrics("vm.memory.total", %{}, last: {2, :hour})
+  ```
   """
-  @type plot_opt() ::
-          {:name, Mobius.name()}
-          | {:last, integer() | {integer(), time_unit()}}
-          | {:from, integer()}
-          | {:to, integer()}
-          | {:type, metric_type()}
+  @spec filter_metrics(String.t(), map, [filter_opt()]) :: [metric()]
+  def filter_metrics(metric_name, tags \\ %{}, opts \\ []) do
+    start_t = System.monotonic_time()
+    prefix = [:mobius, :filter]
+
+    name = Keyword.get(opts, :name, :mobius)
+    parsed_metric_name = parse_metric_name(metric_name)
+    scraper_opts = query_opts(opts)
+
+    # Notify telemetry we are starting query
+    :telemetry.execute(prefix ++ [:start], %{system_time: System.system_time()}, %{
+      name: name,
+      metric_name: metric_name,
+      tags: tags,
+      opts: scraper_opts
+    })
+
+    rows =
+      Scraper.all(name, scraper_opts)
+      |> Enum.flat_map(fn {timestamp, metrics} ->
+        rows_from_metrics(metrics, parsed_metric_name, tags, timestamp, opts)
+      end)
+
+    # Notify telemetry we finished query
+    duration = System.monotonic_time() - start_t
+
+    :telemetry.execute(prefix ++ [:stop], %{duration: duration}, %{
+      name: name,
+      metric_name: metric_name,
+      tags: tags,
+      opts: scraper_opts
+    })
+
+    rows
+  end
 
   @doc """
   Plot the metric name to the screen
+
+  This takes the same arguments as for filter_metrics, eg:
 
   If there are tags for the metric you can pass those in the second argument:
 
@@ -164,15 +256,11 @@ defmodule Mobius do
   """
   @spec plot(binary(), map(), [plot_opt()]) :: :ok
   def plot(metric_name, tags \\ %{}, opts \\ []) do
-    parsed_metric_name = parse_metric_name(metric_name)
-    scraper_query_opts = query_opts(opts)
-
     series =
-      opts
-      |> Keyword.get(:name, :mobius)
-      |> Scraper.all(scraper_query_opts)
-      |> Enum.flat_map(fn {_timestamp, metrics} ->
-        series_for_metric_from_metrics(metrics, parsed_metric_name, tags, opts)
+      filter_metrics(metric_name, tags, opts)
+      |> Enum.flat_map(fn
+        %{value: value} when value != nil -> [value]
+        _ -> []
       end)
 
     case Mobius.Asciichart.plot(series, height: 12) do
@@ -229,14 +317,6 @@ defmodule Mobius do
   defp get_unit_offset(:hour), do: 3600
   defp get_unit_offset(:day), do: 86400
 
-  @type naming_opt :: :csv_ext | :timestamp
-  @type csv_opt() ::
-          {:file, String.t()}
-          | {:naming, [naming_opt]}
-          | {:last, integer() | {integer(), time_unit()}}
-          | {:from, integer()}
-          | {:to, integer()}
-
   @doc """
   Produces a CSV of currently collected metrics, optionally writing the CSV to file.
   The CSV looks like: timestamp, name, type, value, tag1, tag2, tag3..., tagN
@@ -245,7 +325,8 @@ defmodule Mobius do
   If the optional :naming option contains :csv_ext, the .csv extension is added to the file name if not already present.
   If the optional :naming option list :timestamp, the file name is prefixed by a timestamp.
 
-  Just as with plotting, metrics to be outputted to CSV can be restricted to a relative time period:
+  This accepts the same arguments as for filter_metrics to control the metrics, tags, times, etc
+  to be outputted to CSV:
 
    * `:last` - metrics captured over the last `x`
     amount of time. Where `x` is either an integer or a tuple of
@@ -277,23 +358,14 @@ defmodule Mobius do
   """
   @spec to_csv(String.t(), map, [csv_opt]) :: :ok
   def to_csv(metric_name, tags \\ %{}, opts \\ []) do
-    parsed_metric_name = parse_metric_name(metric_name)
-
-    rows =
-      opts
-      |> Keyword.get(:name, :mobius)
-      |> Scraper.all(query_opts(opts))
-      |> Enum.flat_map(fn {timestamp, metrics} ->
-        rows_from_metrics(metrics, parsed_metric_name, tags, timestamp, opts)
-      end)
-
+    rows = filter_metrics(metric_name, tags, opts)
     tag_names = unique_tag_names(rows)
 
     headers_row =
       ["timestamp", "name", "type", "value"] ++
         for tag_name <- tag_names, do: Atom.to_string(tag_name)
 
-    data_rows = data_rows(rows, metric_name, tag_names)
+    data_rows = format_metrics_as_csv(rows, metric_name, tag_names)
 
     csv([headers_row | data_rows], opts)
   end
@@ -305,8 +377,9 @@ defmodule Mobius do
     |> Enum.sort()
   end
 
-  defp data_rows(rows, metric_name, tag_names) do
-    Enum.reduce(rows, [], fn row, acc ->
+  defp format_metrics_as_csv(rows, metric_name, tag_names) do
+    rows
+    |> Enum.map(fn row ->
       tag_values = for tag_name <- tag_names, do: "#{Map.get(row.tags, tag_name, "")}"
 
       data_row =
@@ -318,7 +391,7 @@ defmodule Mobius do
         ] ++
           tag_values
 
-      acc ++ [data_row]
+      data_row
     end)
   end
 
@@ -386,46 +459,20 @@ defmodule Mobius do
     end
   end
 
-  defp series_for_metric_from_metrics(metrics, metric_name, tags, opts) do
-    type = opts[:type]
-
-    Enum.reduce(metrics, [], fn
-      metric, ms ->
-        case value_from_metric(metric, metric_name, tags, type) do
-          nil ->
-            ms
-
-          value ->
-            ms ++ [value]
-        end
-    end)
-  end
-
-  defp value_from_metric({metric_name, _type, value, tags}, metric_name, tags, nil) do
-    value
-  end
-
-  defp value_from_metric({metric_name, type, value, tags}, metric_name, tags, type) do
-    value
-  end
-
-  defp value_from_metric(_metric, _metric_name, _tags, _type), do: nil
-
   defp rows_from_metrics(metrics, metric_name, tags, timestamp, opts) do
     required_type = Keyword.get(opts, :type)
 
-    Enum.reduce(metrics, [], fn
-      {^metric_name, type, value, metric_tags}, rows ->
+    metrics
+    |> Enum.flat_map(fn
+      {^metric_name, type, value, metric_tags} ->
         if match?(^tags, metric_tags) and matches_type?(type, required_type) do
-          row = %{type: type, value: value, tags: metric_tags, timestamp: timestamp}
-
-          rows ++ [row]
+          [%{type: type, value: value, tags: metric_tags, timestamp: timestamp}]
         else
-          rows
+          []
         end
 
-      _metric, rows ->
-        rows
+      _metric ->
+        []
     end)
   end
 
