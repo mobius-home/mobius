@@ -65,7 +65,6 @@ defmodule Mobius.Asciichart do
         height = if cfg[:height], do: cfg[:height] - 1, else: interval
         padding = cfg[:padding] || " "
         ratio = if interval == 0, do: 1, else: height / interval
-
         min2 = safe_floor(minimum * ratio)
         max2 = safe_ceil(maximum * ratio)
 
@@ -102,7 +101,7 @@ defmodule Mobius.Asciichart do
           intmin2..intmax2
           |> Enum.reduce(result, fn y, map ->
             label =
-              (maximum - (y - intmin2) * interval / (rows + 1))
+              (maximum - (y - intmin2) * interval / (rows))
               |> Float.round(2)
               |> :erlang.float_to_binary(decimals: 2)
               |> String.pad_leading(label_size, padding)
