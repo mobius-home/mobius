@@ -74,6 +74,8 @@ defmodule Mobius.Asciichart do
         rows = abs(intmax2 - intmin2)
         width = length(series) + offset
 
+        rows_denom = max(1, rows)
+
         # empty space
         result =
           0..(rows + 1)
@@ -101,7 +103,7 @@ defmodule Mobius.Asciichart do
           intmin2..intmax2
           |> Enum.reduce(result, fn y, map ->
             label =
-              (maximum - (y - intmin2) * interval / (rows))
+              (maximum - (y - intmin2) * interval / rows_denom)
               |> Float.round(2)
               |> :erlang.float_to_binary(decimals: 2)
               |> String.pad_leading(label_size, padding)
