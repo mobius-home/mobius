@@ -6,13 +6,6 @@ defmodule Mobius.Scraper do
 
   alias Mobius.{History, MetricsTable}
 
-  @type record() ::
-          {integer(),
-           [
-             {:telemetry.event_name(), Mobius.metric_type(), :telemetry.event_value(),
-              :telemetry.event_metadata()}
-           ]}
-
   @interval 1_000
 
   @doc """
@@ -38,7 +31,7 @@ defmodule Mobius.Scraper do
   @doc """
   Get all the records
   """
-  @spec all(Mobius.name(), [all_opt()]) :: [record()]
+  @spec all(Mobius.name(), [all_opt()]) :: [Mobius.record()]
   def all(name, opts \\ []) do
     GenServer.call(name(name), {:get, opts})
   end

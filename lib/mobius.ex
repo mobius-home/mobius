@@ -5,7 +5,7 @@ defmodule Mobius do
 
   use Supervisor
 
-  alias Mobius.{MetricsTable, Scraper, Summary}
+  alias Mobius.{Bundle, MetricsTable, Scraper, Summary}
 
   alias Telemetry.Metrics
 
@@ -40,7 +40,7 @@ defmodule Mobius do
   @type metric_name() :: [atom()]
 
   @typedoc """
-  Options to use when fitering time series metric data
+  Options to use when filtering time series metric data
 
   * `:name` - the name of the Mobius instance you are using. Unless you
     specified this in your configuration you should be safe to allow this
@@ -78,6 +78,17 @@ defmodule Mobius do
           | filter_opt()
 
   @type metric() :: %{type: metric_type(), value: term(), tags: map(), timestamp: integer()}
+  @type timestamp() :: integer()
+
+  @typedoc """
+  A list of data recorded data points tied to a particular timestamp
+  """
+  @type record() ::
+          {timestamp(),
+           [
+             {:telemetry.event_name(), Mobius.metric_type(), :telemetry.event_value(),
+              :telemetry.event_metadata()}
+           ]}
 
   @doc """
   Start Mobius
@@ -547,5 +558,21 @@ defmodule Mobius do
 
         error
     end
+  end
+
+  @type make_bundle_opt() :: {:name, name()}
+
+  @doc """
+  Function for creating a `Mobius.Bundle.t()`
+
+  This function makes a bundle that can be used with the functions in
+  `Mobius.Bundle`
+  """
+  @spec make_bundle(Bundle.target(), [make_bundle_opt()]) :: Bundle.t()
+  def make_bundle(bundle_target, opts \\ []) do
+    mobius_name = opts[:name] || :mobius
+    data = Scraper.all(mobius_name)
+
+    Bundle.new(bundle_target, data)
   end
 end
