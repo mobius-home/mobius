@@ -1,7 +1,7 @@
 defmodule Mobius.MixProject do
   use Mix.Project
 
-  @version "0.3.6"
+  @version "0.3.7"
 
   def project do
     [

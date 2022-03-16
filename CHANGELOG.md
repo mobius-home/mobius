@@ -4,6 +4,33 @@
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> Major version zero (0.y.z) is for initial development. Anything MAY change at any time. The public API SHOULD NOT be considered stable.
+
+## [v0.3.7] - 2022-03-16
+
+This release brings in a bunch of new functionality and bug fixes. Along with
+basic maintenance like dependency updates and documentation improvements
+(@ewildgoose).
+
+### Added
+
+- Create, save, and extract tar files that contain metric data, see
+  `Mobius.Bundles` and `Mobius.make_bundle/2` for more information.
+- `Mobius.filter_metrics/3` to filter for desired metrics to enable the
+  metrics to be consumed externally (@ewildgoose)
+- `Mobius.save/1` to manually save the state of the metric data for Mobius
+  (@ewildgoose)
+- `:autosave_interval` option to Mobius to enable a saving data at the given
+  interval (@ewildgoose)
+
+### Fixes
+
+- Unit conversion not working correctly (@ewildgoose)
+- Error handling for when the `:persistence_path` is missing (@ewildgoose)
+- Error handling when there is no data to plot (@ewildgoose)
+- Crash when plotting an array of identical values (@ewildgoose)
+- Correct off by one error when plotting (@ewildgoose)
+
 ## [v0.3.6] - 2022-01-25
 
 ### Added
@@ -77,6 +104,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Initial release!
 
+[v0.3.7]: https://github.com/mattludwigs/mobius/compare/v0.3.6...v0.3.7
 [v0.3.6]: https://github.com/mattludwigs/mobius/compare/v0.3.5...v0.3.6
 [v0.3.5]: https://github.com/mattludwigs/mobius/compare/v0.3.4...v0.3.5
 [v0.3.4]: https://github.com/mattludwigs/mobius/compare/v0.3.3...v0.3.4
