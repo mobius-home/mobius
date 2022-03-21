@@ -43,7 +43,9 @@ defmodule Mobius.MixProject do
       main: "readme",
       source_ref: "v#{@version}",
       source_url: "https://github.com/mattludwigs/mobius",
-      skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
+      skip_undefined_reference_warnings_on: ["CHANGELOG.md"],
+      assets: "assets",
+      logo: "assets/m.png"
     ]
   end
 
