@@ -2,6 +2,8 @@
 
 [![CircleCI](https://circleci.com/gh/mattludwigs/mobius/tree/main.svg?style=svg)](https://circleci.com/gh/mattludwigs/mobius/tree/main)
 
+![Mobius](assets/mobius-name.png)
+
 Library for localized telemetry metrics
 
 ## Installation
