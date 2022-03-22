@@ -4,7 +4,7 @@ defmodule Mobius.Scraper do
   use GenServer
   require Logger
 
-  alias Mobius.{History, MetricsTable}
+  alias Mobius.{MetricsTable, RRD}
 
   @interval 1_000
 
@@ -64,7 +64,7 @@ defmodule Mobius.Scraper do
   defp make_history(state, args) do
     tlb =
       args
-      |> History.new()
+      |> RRD.new()
       |> load_history(state)
 
     Map.put(state, :history, tlb)
@@ -72,7 +72,7 @@ defmodule Mobius.Scraper do
 
   defp load_history(tlb, state) do
     with {:ok, contents} <- File.read(file(state)),
-         {:ok, tlb} <- History.load(tlb, contents) do
+         {:ok, tlb} <- RRD.load(tlb, contents) do
       tlb
     else
       {:error, :enoent} ->
@@ -93,7 +93,7 @@ defmodule Mobius.Scraper do
   def handle_call({:get, opts}, _from, state) do
     case Keyword.get(opts, :from) do
       nil ->
-        {:reply, History.all(state.history), state}
+        {:reply, RRD.all(state.history), state}
 
       from ->
         {:reply, query_history(from, state, opts), state}
@@ -107,10 +107,10 @@ defmodule Mobius.Scraper do
   defp query_history(from, state, opts) do
     case opts[:to] do
       nil ->
-        History.query(state.history, from)
+        RRD.query(state.history, from)
 
       to ->
-        History.query(state.history, from, to)
+        RRD.query(state.history, from, to)
     end
   end
 
@@ -122,7 +122,7 @@ defmodule Mobius.Scraper do
 
       scrape ->
         ts = System.system_time(:second)
-        history = History.insert(state.history, ts, scrape)
+        history = RRD.insert(state.history, ts, scrape)
 
         {:noreply, %{state | history: history}}
     end
@@ -139,7 +139,7 @@ defmodule Mobius.Scraper do
 
   # Write our history to persistent storage
   defp save_to_persistence(state) do
-    contents = History.save(state.history)
+    contents = RRD.save(state.history)
 
     case File.write(file(state), contents) do
       :ok ->

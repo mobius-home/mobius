@@ -1,5 +1,32 @@
-defmodule Mobius.History do
+defmodule Mobius.RRD do
   @moduledoc false
+
+  # A round robin database for Mobius
+  #
+  # A round robin database (RRD) is a data store that a circular buffer to store
+  # information. As time moves forward the older data points get overwritten by
+  # newer data points.
+  #
+  # However, the older data points can be held on in an archive which operates
+  # in a similar fashion. That is older data points will be over overwritten by
+  # newer data points.
+  #
+  # The Mobius RRD has 3 archives which are minute, hour, day. These stores one
+  # data point per time period the archive is named. For example, every minute
+  # Mobius RRD will put a data point in the minute archive. These are called the
+  # resolution.
+  #
+  # Each resolution can be configured to allow for as many signle data points as
+  # you see fit. For example, if you want to store three days of data at an hour
+  # resolutin you can configure the RRD like so:
+  #
+  # RRD.new(hour_count: 72)
+  #
+  # This will configure the hour resolution to store 72 hours worth of data points
+  # in the hour archive.
+  #
+  # For more information about round robin databases, RRD tool is a great resource
+  # to study.
 
   @serialization_version 1
 
@@ -34,47 +61,47 @@ defmodule Mobius.History do
   Insert an item for the specified time
   """
   @spec insert(t(), integer(), any()) :: t()
-  def insert(tlb, ts, item) do
+  def insert(rrd, ts, item) do
     value = {ts, item}
 
     cond do
-      ts >= tlb.day_next ->
+      ts >= rrd.day_next ->
         %{
-          tlb
-          | day: CircularBuffer.insert(tlb.day, value),
+          rrd
+          | day: CircularBuffer.insert(rrd.day, value),
             day_next: next(ts, 86400),
             hour_next: next(ts, 3600),
             minute_next: next(ts, 60),
             second_next: ts + 1
         }
 
-      ts >= tlb.hour_next ->
+      ts >= rrd.hour_next ->
         %{
-          tlb
-          | hour: CircularBuffer.insert(tlb.hour, value),
+          rrd
+          | hour: CircularBuffer.insert(rrd.hour, value),
             hour_next: next(ts, 3600),
             minute_next: next(ts, 60),
             second_next: ts + 1
         }
 
-      ts >= tlb.minute_next ->
+      ts >= rrd.minute_next ->
         %{
-          tlb
-          | minute: CircularBuffer.insert(tlb.minute, value),
+          rrd
+          | minute: CircularBuffer.insert(rrd.minute, value),
             minute_next: next(ts, 60),
             second_next: ts + 1
         }
 
-      ts >= tlb.second_next ->
+      ts >= rrd.second_next ->
         %{
-          tlb
-          | second: CircularBuffer.insert(tlb.second, value),
+          rrd
+          | second: CircularBuffer.insert(rrd.second, value),
             second_next: ts + 1
         }
 
       true ->
         Logger.debug("Dropping scrape #{inspect(item)} at #{inspect(ts)}")
-        tlb
+        rrd
     end
   end
 
@@ -85,21 +112,21 @@ defmodule Mobius.History do
   @doc """
   Load persisted data back into a TimeLayerBuffer
 
-  The `tlb` that's passed in is expected to be a new one without any entries.
+  The `rrd` that's passed in is expected to be a new one without any entries.
   """
   @spec load(t(), binary()) :: {:ok, t()} | {:error, reason :: atom()}
-  def load(tlb, <<@serialization_version, data::binary>>) do
+  def load(rrd, <<@serialization_version, data::binary>>) do
     decoded =
       data
       |> :erlang.binary_to_term()
-      |> Enum.reduce(tlb, fn {ts, item}, tlb -> insert(tlb, ts, item) end)
+      |> Enum.reduce(rrd, fn {ts, item}, tlb -> insert(tlb, ts, item) end)
 
     {:ok, decoded}
   catch
     _, _ -> {:error, :corrupt}
   end
 
-  def load(_tlb, _) do
+  def load(_rrd, _) do
     {:error, :unsupported_version}
   end
 
@@ -107,19 +134,19 @@ defmodule Mobius.History do
   Serialize to an iolist
   """
   @spec save(t()) :: iolist()
-  def save(tlb) do
-    [@serialization_version, :erlang.term_to_iovec(all(tlb))]
+  def save(rrd) do
+    [@serialization_version, :erlang.term_to_iovec(all(rrd))]
   end
 
   @doc """
   Return all items in order
   """
   @spec all(t()) :: [{integer(), any()}]
-  def all(tlb) do
+  def all(rrd) do
     result =
-      CircularBuffer.to_list(tlb.day) ++
-        CircularBuffer.to_list(tlb.hour) ++
-        CircularBuffer.to_list(tlb.minute) ++ CircularBuffer.to_list(tlb.second)
+      CircularBuffer.to_list(rrd.day) ++
+        CircularBuffer.to_list(rrd.hour) ++
+        CircularBuffer.to_list(rrd.minute) ++ CircularBuffer.to_list(rrd.second)
 
     Enum.sort(result, fn {ts1, _}, {ts2, _} -> ts1 < ts2 end)
   end
@@ -128,8 +155,8 @@ defmodule Mobius.History do
   Return all items within the specified range
   """
   @spec query(t(), from :: integer(), to :: integer()) :: [{integer(), any()}]
-  def query(tlb, from, to) do
-    tlb
+  def query(rrd, from, to) do
+    rrd
     |> all()
     |> Enum.drop_while(fn {ts, _} -> ts < from end)
     |> Enum.take_while(fn {ts, _} -> ts <= to end)
@@ -139,8 +166,8 @@ defmodule Mobius.History do
   Return all items with timestamps equal to or after the specified one
   """
   @spec query(t(), from :: integer()) :: [{integer(), any()}]
-  def query(tlb, from) do
-    tlb
+  def query(rrd, from) do
+    rrd
     |> all()
     |> Enum.drop_while(fn {ts, _} -> ts < from end)
   end
