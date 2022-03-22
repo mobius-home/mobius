@@ -351,6 +351,7 @@ defmodule Mobius do
 
   Examples:
 
+  ```
   iex> Mobius.to_csv("vm.memory.total", %{})
   # -- writes CSV values to the terminal
 
@@ -365,6 +366,7 @@ defmodule Mobius do
 
   iex> Mobius.to_csv("vintage_net_qmi.connection.end.duration", %{ifname: "wwan0", status: :disconnected}, type: :sum, last: {60, :day})
   # -- writes CSV values to the terminal
+  ```
 
   """
   @spec to_csv(String.t(), map, [csv_opt]) :: :ok
