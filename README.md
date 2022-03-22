@@ -65,12 +65,33 @@ end
 
 ### Saving / Autosaving metrics data
 
-By default the metrics data is persisted on a normal shutdown. However, data will not
-be persisted during a sudden shutdown, eg Control-C in IEX, kill, sudden power off
+By default the metrics data is persisted on a normal shutdown. However, data
+will not be persisted during a sudden shutdown, eg Control-C in IEX, kill,
+sudden power off.
 
-It's possible to manually call Mobius.save/1 to force an interim write of the persistence data.
+It's possible to manually call Mobius.save/1 to force an interim write of the
+persistence data.
 
 This can be automated by passing `autosave_interval` to Mobius
+
+```elixir
+def start(_type, _args) do
+  metrics = [
+    Metrics.last_value("my.telemetry.event"),
+  ]
+
+  children = [
+    # ... other children ....
+    {Mobius, metrics: metrics, autosave_interval: 60} # auto save every 60 seconds
+    # ... other children ....
+  ]
+
+  # See https://hexdocs.pm/elixir/Supervisor.html
+  # for other strategies and supported options
+  opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+  Supervisor.start_link(children, opts)
+end
+```
 
 ### Charting historical metrics
 
@@ -100,68 +121,6 @@ To see the current metrics you can use `Mobius.info/0`:
 
 ```elixir
 iex> Mobius.info()
-
-Metric Name: vintage_net_qmi.connection.end.duration
-Tags: %{ifname: "wwan0", status: :disconnected}
-sum: 1247
-last_value: 0
-
-Metric Name: vintage_net_qmi.connection.end.duration
-Tags: %{ifname: "wwan0", status: :internet}
-sum: 667037
-last_value: 0
-
-Metric Name: vintage_net_qmi.connection.statistics.rx_bytes
-Tags: %{ifname: "wwan0"}
-last_value: 1829748
-
-Metric Name: vintage_net_qmi.connection.statistics.rx_errors
-Tags: %{ifname: "wwan0"}
-last_value: 0
-
-Metric Name: vintage_net_qmi.connection.statistics.rx_packets
-Tags: %{ifname: "wwan0"}
-last_value: 36125
-
-Metric Name: vintage_net_qmi.connection.statistics.tx_bytes
-Tags: %{ifname: "wwan0"}
-last_value: 3113540
-
-Metric Name: vintage_net_qmi.connection.statistics.tx_errors
-Tags: %{ifname: "wwan0"}
-last_value: 0
-
-Metric Name: vintage_net_qmi.connection.statistics.tx_packets
-Tags: %{ifname: "wwan0"}
-last_value: 61417
-
-Metric Name: vintage_net_qmi.connection.status
-Tags: %{ifname: "wwan0"}
-last_value: 0
-
-Metric Name: vintage_net_qmi.connection.status
-Tags: %{ifname: "wwan0", status: :disconnected}
-counter: 897
-
-Metric Name: vintage_net_qmi.connection.status
-Tags: %{ifname: "wwan0", status: :internet}
-counter: 68
-
-Metric Name: vintage_net_qmi.signal_strength.asu
-Tags: %{ifname: "wwan0"}
-last_value: 99
-
-Metric Name: vintage_net_qmi.signal_strength.bars
-Tags: %{ifname: "wwan0"}
-last_value: 1
-
-Metric Name: vintage_net_qmi.signal_strength.dbm
-Tags: %{ifname: "wwan0"}
-last_value: -128
-
-Metric Name: vintage_net_qmi.signal_strength.rssi
-Tags: %{ifname: "wwan0"}
-last_value: -128
 
 Metric Name: vm.memory.total
 Tags: %{}
