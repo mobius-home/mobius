@@ -1,55 +1,95 @@
 defmodule Mobius.RRD do
-  @moduledoc false
+  @moduledoc """
+  A round robin database for Mobius
 
-  # A round robin database for Mobius
-  #
-  # A round robin database (RRD) is a data store that a circular buffer to store
-  # information. As time moves forward the older data points get overwritten by
-  # newer data points.
-  #
-  # However, the older data points can be held on in an archive which operates
-  # in a similar fashion. That is older data points will be over overwritten by
-  # newer data points.
-  #
-  # The Mobius RRD has 3 archives which are minute, hour, day. These stores one
-  # data point per time period the archive is named. For example, every minute
-  # Mobius RRD will put a data point in the minute archive. These are called the
-  # resolution.
-  #
-  # Each resolution can be configured to allow for as many signle data points as
-  # you see fit. For example, if you want to store three days of data at an hour
-  # resolutin you can configure the RRD like so:
-  #
-  # RRD.new(hour_count: 72)
-  #
-  # This will configure the hour resolution to store 72 hours worth of data points
-  # in the hour archive.
-  #
-  # For more information about round robin databases, RRD tool is a great resource
-  # to study.
+  This is RRD is used by Mobius to store historicial metric data.
+
+  A round robin database (RRD) is a data store that a circular buffer to store
+  information. As time moves forward the older data points get overwritten by
+  newer data points. This type of data storage is useful for a consistent memory
+  footprint for timeseries data.
+
+  The `Mobius.RRD` implementation provides four resolutions. These are: seconds,
+  minutes, hours, and days. Each resolution can be configured to allow for as
+  many single data points as you see fit. For example, if you want to store three
+  days of data at an hour resolutin you can configure the RRD like so:
+
+  ```elixir
+  RRD.new(hours: 72)
+  ```
+
+  The above will configure the hour resolution to store 72 hours worth of data points
+  in the hour archive.
+
+  The default resolutions are:
+
+  * 60 days (each day for about 2 months)
+  * 48 hours (each hour for 2 days)
+  * 120 minutes (each minute for 2 hours)
+  * 120 seconds (each second for 2 minutes)
+
+  For more information about round robin databases, RRD tool is a great resource
+  to study.
+  """
 
   @serialization_version 1
 
   require Logger
 
-  @type t() :: %{
-          day: CircularBuffer.t(),
-          hour: CircularBuffer.t(),
-          minute: CircularBuffer.t(),
-          second: CircularBuffer.t(),
-          day_next: integer(),
-          hour_next: integer(),
-          minute_next: integer(),
-          second_next: integer()
-        }
+  @opaque t() :: %{
+            day: CircularBuffer.t(),
+            hour: CircularBuffer.t(),
+            minute: CircularBuffer.t(),
+            second: CircularBuffer.t(),
+            day_next: integer(),
+            hour_next: integer(),
+            minute_next: integer(),
+            second_next: integer()
+          }
 
-  @spec new([Mobius.arg()]) :: t()
-  def new(args) do
+  @typedoc """
+  Resolution name
+  """
+  @type resolution() :: :seconds | :minutes | :hours | :days
+
+  @typedoc """
+  Options for the RRD
+
+  For resolution options you specifiy whitch resolution and the max number of
+  metric data to keep for that resolution.
+
+  For example, if the RRD were to track seconds up to five minutes it would need
+  to track `300` seconds. Also, if the same RRD wanted to track day resolution
+  for a year, it would need to be contain `365` days.
+
+  ```elixir
+  Mobius.RRD.new(seconds: 300, days: 365)
+  ```
+  """
+  @type create_opt() :: {resolution(), non_neg_integer()}
+
+  @doc """
+  Create a new RRD
+
+  The default resolution values are:
+
+  * 60 days (each day for about 2 months)
+  * 48 hours (each hour for 2 days)
+  * 120 minutes (each minute for 2 hours)
+  * 120 seconds (each second for 2 minutes)
+  """
+  @spec new([create_opt()]) :: t()
+  def new(opts \\ []) do
+    days = opts[:days] || 60
+    hours = opts[:hours] || 48
+    minutes = opts[:minutes] || 120
+    seconds = opts[:seconds] || 120
+
     %{
-      day: CircularBuffer.new(args[:day_count]),
-      hour: CircularBuffer.new(args[:hour_count]),
-      minute: CircularBuffer.new(args[:minute_count]),
-      second: CircularBuffer.new(args[:second_count]),
+      day: CircularBuffer.new(days),
+      hour: CircularBuffer.new(hours),
+      minute: CircularBuffer.new(minutes),
+      second: CircularBuffer.new(seconds),
       day_next: 0,
       hour_next: 0,
       minute_next: 0,
@@ -114,7 +154,7 @@ defmodule Mobius.RRD do
 
   The `rrd` that's passed in is expected to be a new one without any entries.
   """
-  @spec load(t(), binary()) :: {:ok, t()} | {:error, reason :: atom()}
+  @spec load(t(), binary()) :: {:ok, t()} | {:error, Mobius.DataLoadError.t()}
   def load(rrd, <<@serialization_version, data::binary>>) do
     decoded =
       data
@@ -123,11 +163,11 @@ defmodule Mobius.RRD do
 
     {:ok, decoded}
   catch
-    _, _ -> {:error, :corrupt}
+    _, _ -> {:error, Mobius.DataLoadError.exception(reason: :corrupt, who: rrd)}
   end
 
-  def load(_rrd, _) do
-    {:error, :unsupported_version}
+  def load(rrd, _) do
+    {:error, Mobius.DataLoadError.exception(reason: :unsupported_version, who: rrd)}
   end
 
   @doc """
