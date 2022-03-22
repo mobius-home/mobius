@@ -19,14 +19,16 @@ defmodule Mobius do
   * `:name` - the name of the mobius instance (defaults to `:mobius`)
   * `:metrics` - list of telemetry metrics for Mobius to track
   * `:persistence_dir` - the top level directory where mobius will persist
-  * `:autosave_interval` - time in seconds between automatic writes of the persistence data (default disabled)
-    metric information
-  * `:day_count` - number of day-granularity samples to keep
-  * `:hour_count` - number of hour-granularity samples to keep
-  * `:minute_count` - number of minute-granularity samples to keep
-  * `:second_count` - number of second-granularity samples to keep
+  * `:autosave_interval` - time in seconds between automatic writes of the
+     persistence data (default disabled) metric information
+  * `:database` - the `Mobius.RRD.t()` to use. This will default to the the default
+     values found in `Mobius.RRD`
   """
-  @type arg() :: {:name, name()} | {:metrics, [Metrics.t()]} | {:persistence_dir, binary()}
+  @type arg() ::
+          {:name, name()}
+          | {:metrics, [Metrics.t()]}
+          | {:persistence_dir, binary()}
+          | {:database, Mobius.RRD.t()}
 
   @typedoc """
   The name of the Mobius instance
@@ -106,10 +108,7 @@ defmodule Mobius do
         args =
           args
           |> Keyword.put(:persistence_dir, mobius_persistence_path)
-          |> Keyword.put_new(:day_count, 60)
-          |> Keyword.put_new(:hour_count, 48)
-          |> Keyword.put_new(:minute_count, 120)
-          |> Keyword.put_new(:second_count, 120)
+          |> Keyword.put_new(:database, Mobius.RRD.new())
 
         MetricsTable.init(args)
 

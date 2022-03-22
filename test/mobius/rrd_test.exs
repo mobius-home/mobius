@@ -49,19 +49,29 @@ defmodule Mobius.RRDTest do
     empty_tlb = RRD.new(@args)
 
     bad_version = <<100, 2, 3, 4>>
-    assert RRD.load(empty_tlb, bad_version) == {:error, Mobius.DataLoadError.exception(reason: :unsupported_version)}
+
+    assert RRD.load(empty_tlb, bad_version) ==
+             {:error, Mobius.DataLoadError.exception(reason: :unsupported_version)}
 
     bad_term = <<1, 2, 3, 4, 5>>
-    assert RRD.load(empty_tlb, bad_term) == {:error, Mobius.DataLoadError.exception(reason: :corrupt)}
+
+    assert RRD.load(empty_tlb, bad_term) ==
+             {:error, Mobius.DataLoadError.exception(reason: :corrupt)}
 
     unexpected_term = <<1>> <> :erlang.term_to_binary(:not_a_list)
-    assert RRD.load(empty_tlb, unexpected_term) == {:error, Mobius.DataLoadError.exception(reason: :corrupt)}
+
+    assert RRD.load(empty_tlb, unexpected_term) ==
+             {:error, Mobius.DataLoadError.exception(reason: :corrupt)}
 
     unexpected_term2 = <<1>> <> :erlang.term_to_binary([:not_a_tuple])
-    assert RRD.load(empty_tlb, unexpected_term2) == {:error, Mobius.DataLoadError.exception(reason: :corrupt)}
+
+    assert RRD.load(empty_tlb, unexpected_term2) ==
+             {:error, Mobius.DataLoadError.exception(reason: :corrupt)}
 
     unexpected_term3 = <<1>> <> :erlang.term_to_binary([{:not_a_timestamp, :value}])
-    assert RRD.load(empty_tlb, unexpected_term3) == {:error, Mobius.DataLoadError.exception(reason: :corrupt)}
+
+    assert RRD.load(empty_tlb, unexpected_term3) ==
+             {:error, Mobius.DataLoadError.exception(reason: :corrupt)}
   end
 
   test "fill up the all buffers" do

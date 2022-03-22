@@ -9,7 +9,7 @@ defmodule Mobius.Scraper do
   @interval 1_000
 
   @doc """
-  Start the history server
+  Start the scraper server
   """
   @spec start_link([Mobius.arg()]) :: GenServer.on_start()
   def start_link(args) do
@@ -50,7 +50,7 @@ defmodule Mobius.Scraper do
     state =
       args
       |> state_from_args()
-      |> make_history(args)
+      |> make_database(args)
 
     {:ok, state}
   end
@@ -61,27 +61,26 @@ defmodule Mobius.Scraper do
     |> Enum.into(%{})
   end
 
-  defp make_history(state, args) do
-    tlb =
-      args
-      |> RRD.new()
-      |> load_history(state)
+  defp make_database(state, args) do
+    rrd =
+      args[:database]
+      |> load_data(state)
 
-    Map.put(state, :history, tlb)
+    Map.put(state, :database, rrd)
   end
 
-  defp load_history(tlb, state) do
+  defp load_data(database, state) do
     with {:ok, contents} <- File.read(file(state)),
-         {:ok, tlb} <- RRD.load(tlb, contents) do
-      tlb
+         {:ok, rrd} <- RRD.load(database, contents) do
+      rrd
     else
       {:error, :enoent} ->
-        tlb
+        database
 
-      error ->
-        Logger.warn("Error reading history file because #{inspect(error)}, ignoring")
+      {:error, %Mobius.DataLoadError{} = error} ->
+        Logger.warn(Exception.message(error))
 
-        tlb
+        database
     end
   end
 
@@ -93,10 +92,10 @@ defmodule Mobius.Scraper do
   def handle_call({:get, opts}, _from, state) do
     case Keyword.get(opts, :from) do
       nil ->
-        {:reply, RRD.all(state.history), state}
+        {:reply, RRD.all(state.database), state}
 
       from ->
-        {:reply, query_history(from, state, opts), state}
+        {:reply, query_database(from, state, opts), state}
     end
   end
 
@@ -104,13 +103,13 @@ defmodule Mobius.Scraper do
     {:reply, save_to_persistence(state), state}
   end
 
-  defp query_history(from, state, opts) do
+  defp query_database(from, state, opts) do
     case opts[:to] do
       nil ->
-        RRD.query(state.history, from)
+        RRD.query(state.database, from)
 
       to ->
-        RRD.query(state.history, from, to)
+        RRD.query(state.database, from, to)
     end
   end
 
@@ -122,9 +121,9 @@ defmodule Mobius.Scraper do
 
       scrape ->
         ts = System.system_time(:second)
-        history = RRD.insert(state.history, ts, scrape)
+        database = RRD.insert(state.database, ts, scrape)
 
-        {:noreply, %{state | history: history}}
+        {:noreply, %{state | database: database}}
     end
   end
 
@@ -137,9 +136,9 @@ defmodule Mobius.Scraper do
     save_to_persistence(state)
   end
 
-  # Write our history to persistent storage
+  # Write our database to persistent storage
   defp save_to_persistence(state) do
-    contents = RRD.save(state.history)
+    contents = RRD.save(state.database)
 
     case File.write(file(state), contents) do
       :ok ->
