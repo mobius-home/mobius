@@ -25,7 +25,7 @@ defmodule MobiusTest do
 
     assert capture_log(fn ->
              assert {:ok, _pid} = start_supervised({Mobius, @default_args})
-           end) =~ "Error reading history file"
+           end) =~ "Unable to load data because of :unsupported_version"
   end
 
   test "can save persistence data" do

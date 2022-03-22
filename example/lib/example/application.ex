@@ -16,10 +16,13 @@ defmodule Example.Application do
       Metrics.summary("vm.memory.total")
     ]
 
+    # custom database that tracks seconds resolution for 5 minutes
+    database = Mobius.RRD.new(seconds: 300)
+
     children = [
       # Starts a worker by calling: Example.Worker.start_link(arg)
       # {Example.Worker, arg}
-      {Mobius, metrics: metrics, persistence_dir: "/tmp"}
+      {Mobius, metrics: metrics, persistence_dir: "/tmp", database: database}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
