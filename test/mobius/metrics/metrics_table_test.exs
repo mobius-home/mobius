@@ -5,7 +5,7 @@ defmodule Mobius.Metrics.MetricsTableTest do
 
   setup do
     table_name = :metrics_table_test_table
-    MetricsTable.init(name: table_name, persistence_dir: "/does/not/matter/here")
+    MetricsTable.init(mobius_instance: table_name, persistence_dir: "/does/not/matter/here")
 
     {:ok, %{table: table_name}}
   end

@@ -26,7 +26,7 @@ defmodule Mobius.Exports do
   * `:to` - the unix timestamp, in seconds, to stop querying at
   """
   @type export_opt() ::
-          {:mobius_instance, atom()}
+          {:mobius_instance, Mobius.instance()}
           | {:from, integer()}
           | {:to, integer()}
           | {:last, integer() | {integer(), Mobius.time_unit()}}

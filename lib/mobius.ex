@@ -9,7 +9,7 @@ defmodule Mobius do
 
   alias Telemetry.Metrics
 
-  @default_args [name: :mobius, persistence_dir: "/data", autosave_interval: nil]
+  @default_args [mobius_instance: :mobius, persistence_dir: "/data", autosave_interval: nil]
 
   @type time_unit() :: :second | :minute | :hour | :day
 
@@ -25,7 +25,7 @@ defmodule Mobius do
      values found in `Mobius.RRD`
   """
   @type arg() ::
-          {:name, name()}
+          {:mobius_instance, instance()}
           | {:metrics, [Metrics.t()]}
           | {:persistence_dir, binary()}
           | {:database, Mobius.RRD.t()}
@@ -35,7 +35,7 @@ defmodule Mobius do
 
   This is used to store data for a particular set of mobius metrics.
   """
-  @type name() :: atom()
+  @type instance() :: atom()
 
   @type metric_type() :: :counter | :last_value | :sum | :summary
 
@@ -63,7 +63,7 @@ defmodule Mobius do
 
   @impl Supervisor
   def init(args) do
-    mobius_persistence_path = Path.join(args[:persistence_dir], to_string(args[:name]))
+    mobius_persistence_path = Path.join(args[:persistence_dir], to_string(args[:mobius_instance]))
 
     case ensure_mobius_persistence_dir(mobius_persistence_path) do
       :ok ->
@@ -123,9 +123,13 @@ defmodule Mobius do
   If you configured Mobius to use a different name then you can pass in your
   custom name to ensure Mobius requests the metrics from the right place.
   """
-  @spec info(Mobius.name() | nil) :: :ok
-  def info(name \\ @default_args[:name]) do
-    name
+  @spec info(Mobius.instance() | nil) :: :ok
+  def info() do
+    info(@default_args[:mobius_instance])
+  end
+
+  def info(instance) do
+    instance
     |> MetricsTable.get_entries()
     |> Enum.group_by(fn {event_name, _type, _value, meta} -> {event_name, meta} end)
     |> Enum.each(fn {{event_name, meta}, metrics} ->
@@ -156,16 +160,21 @@ defmodule Mobius do
   @doc """
   Persist the metrics to disk
   """
-  @spec save(Mobius.name()) :: :ok | {:error, reason :: term()}
-  def save(name \\ @default_args[:name]) do
+  @spec save(instance()) :: :ok | {:error, reason :: term()}
+  def save(), do: save(@default_args[:mobius_instance])
+
+  def save(instance) do
     start_t = System.monotonic_time()
     prefix = [:mobius, :save]
-    :telemetry.execute(prefix ++ [:start], %{system_time: System.system_time()}, %{name: name})
 
-    with :ok <- Scraper.save(name),
-         :ok <- MetricsTable.Monitor.save(name) do
+    :telemetry.execute(prefix ++ [:start], %{system_time: System.system_time()}, %{
+      instance: instance
+    })
+
+    with :ok <- Scraper.save(instance),
+         :ok <- MetricsTable.Monitor.save(instance) do
       duration = System.monotonic_time() - start_t
-      :telemetry.execute(prefix ++ [:stop], %{duration: duration}, %{name: name})
+      :telemetry.execute(prefix ++ [:stop], %{duration: duration}, %{instance: instance})
 
       :ok
     else
@@ -175,14 +184,14 @@ defmodule Mobius do
         :telemetry.execute(
           prefix ++ [:exception],
           %{reason: inspect(error), duration: duration},
-          %{name: name}
+          %{instance: instance}
         )
 
         error
     end
   end
 
-  @type make_bundle_opt() :: {:name, name()}
+  @type make_bundle_opt() :: {:mobius_instance, instance()}
 
   @doc """
   Function for creating a `Mobius.Bundle.t()`
@@ -192,7 +201,7 @@ defmodule Mobius do
   """
   @spec make_bundle(Bundle.target(), [make_bundle_opt()]) :: Bundle.t()
   def make_bundle(bundle_target, opts \\ []) do
-    mobius_name = opts[:name] || :mobius
+    mobius_name = opts[:mobius_instance] || @default_args[:mobius_instance]
     data = Scraper.all(mobius_name)
 
     Bundle.new(bundle_target, data)

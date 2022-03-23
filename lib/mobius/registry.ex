@@ -11,9 +11,9 @@ defmodule Mobius.Registry do
   Arguments to start the registry server
 
   * `:metrics` - which metrics you want Mobius to attach a handler for
-  * `:name` - the name used for the Mobius instance
+  * `:mobius_instance` - the Mobius instance
   """
-  @type arg() :: {:metrics, [Metrics.t()]} | {:name, Mobius.name()}
+  @type arg() :: {:metrics, [Metrics.t()]} | {:mobius_instance, Mobius.instance()}
 
   @doc """
   Start the registry server
@@ -22,11 +22,11 @@ defmodule Mobius.Registry do
   def start_link(args) do
     ensure_metrics(args)
 
-    GenServer.start_link(__MODULE__, args, name: name(args[:name]))
+    GenServer.start_link(__MODULE__, args, name: name(args[:mobius_instance]))
   end
 
-  defp name(mobius_name) do
-    Module.concat(__MODULE__, mobius_name)
+  defp name(instance) do
+    Module.concat(__MODULE__, instance)
   end
 
   defp ensure_metrics(args) do
@@ -36,17 +36,21 @@ defmodule Mobius.Registry do
   @doc """
   Get which metrics Mobius is tracking
   """
-  @spec metrics(Mobius.name()) :: [Metrics.t()]
-  def metrics(name) do
-    GenServer.call(name(name), :metrics)
+  @spec metrics(Mobius.instance()) :: [Metrics.t()]
+  def metrics(instance) do
+    GenServer.call(name(instance), :metrics)
   end
 
   @impl GenServer
   def init(args) do
     registered = register_metrics(args)
 
-    {:ok, %{registered: registered, metrics: Keyword.fetch!(args, :metrics), table: args[:name]},
-     {:continue, :update_metrics_table}}
+    {:ok,
+     %{
+       registered: registered,
+       metrics: Keyword.fetch!(args, :metrics),
+       table: args[:mobius_instance]
+     }, {:continue, :update_metrics_table}}
   end
 
   defp register_metrics(args) do
@@ -55,7 +59,7 @@ defmodule Mobius.Registry do
 
       _ =
         :telemetry.attach(id, event, &Mobius.Events.handle/4, %{
-          table: args[:name],
+          table: args[:mobius_instance],
           metrics: metrics
         })
 
