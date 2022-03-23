@@ -15,7 +15,7 @@ defmodule Mobius.Events do
   * `:metrics` - the list of metrics that Mobius is to listen for
   """
   @type handler_config() :: %{
-          table: Mobius.name(),
+          table: Mobius.instance(),
           metrics: [Metrics.t()]
         }
 

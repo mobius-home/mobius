@@ -9,18 +9,18 @@ defmodule Mobius.MetricsTable.Monitor do
 
   @spec start_link([Mobius.arg()]) :: GenServer.on_start()
   def start_link(args) do
-    GenServer.start_link(__MODULE__, args, name: name(args[:name]))
+    GenServer.start_link(__MODULE__, args, name: name(args[:mobius_instance]))
   end
 
-  defp name(mobius_name) do
-    Module.concat(__MODULE__, mobius_name)
+  defp name(instance) do
+    Module.concat(__MODULE__, instance)
   end
 
   @doc """
   Persist the metrics to disk
   """
-  @spec save(Mobius.name()) :: :ok | {:error, reason :: term()}
-  def save(name), do: GenServer.call(name(name), :save)
+  @spec save(Mobius.instance()) :: :ok | {:error, reason :: term()}
+  def save(instance), do: GenServer.call(name(instance), :save)
 
   @impl GenServer
   def init(args) do
@@ -28,7 +28,7 @@ defmodule Mobius.MetricsTable.Monitor do
 
     state =
       args
-      |> Keyword.take([:name, :persistence_dir])
+      |> Keyword.take([:mobius_instance, :persistence_dir])
       |> Enum.into(%{})
 
     {:ok, state}
@@ -46,6 +46,6 @@ defmodule Mobius.MetricsTable.Monitor do
 
   # Write our ETS table to persistent storage
   defp save_to_persistence(state) do
-    MetricsTable.save(state.name, state.persistence_dir)
+    MetricsTable.save(state.mobius_instance, state.persistence_dir)
   end
 end

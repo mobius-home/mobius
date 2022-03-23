@@ -22,19 +22,21 @@ defmodule Mobius.MetricsTable do
   @doc """
   Initialize the metrics table
   """
-  @spec init([Mobius.arg()]) :: Mobius.name()
+  @spec init([Mobius.arg()]) :: Mobius.instance()
   def init(args) do
+    table_name = args[:mobius_instance]
+
     case read_table_from_file(args) do
       {:ok, table} ->
         table
 
       {:error, :enoent} ->
         # Metrics save file doesn't (yet) exist
-        :ets.new(args[:name], [:named_table, :public, :set])
+        :ets.new(table_name, [:named_table, :public, :set])
 
       {:error, reason} ->
         Logger.warn("[Mobius] Could not recover metrics from file because #{inspect(reason)}")
-        :ets.new(args[:name], [:named_table, :public, :set])
+        :ets.new(table_name, [:named_table, :public, :set])
     end
   end
 
@@ -53,53 +55,54 @@ defmodule Mobius.MetricsTable do
   @doc """
   Save the ets table to a file
   """
-  @spec save(Mobius.name(), Path.t()) :: :ok | {:error, reason :: term()}
-  def save(name, persistence_dir) do
+  @spec save(Mobius.instance(), Path.t()) :: :ok | {:error, reason :: term()}
+  def save(instance, persistence_dir) do
     file = String.to_charlist("#{persistence_dir}/metrics_table")
 
-    :ets.tab2file(name, file)
+    :ets.tab2file(instance, file)
   end
 
   @doc """
   Put the metric information in to the metric table
   """
-  @spec put(Mobius.name(), Mobius.metric_name(), Mobius.metric_type(), integer(), map()) :: :ok
-  def put(name, event_name, type, value, meta \\ %{})
+  @spec put(Mobius.instance(), Mobius.metric_name(), Mobius.metric_type(), integer(), map()) ::
+          :ok
+  def put(table, event_name, type, value, meta \\ %{})
 
-  def put(name, event_name, :counter, _value, meta) do
+  def put(table, event_name, :counter, _value, meta) do
     key = make_key(event_name, :counter, meta)
 
-    put_counter_type(name, key, 1)
+    put_counter_type(table, key, 1)
 
     :ok
   end
 
-  def put(name, event_name, :last_value, value, meta) do
+  def put(table, event_name, :last_value, value, meta) do
     key = make_key(event_name, :last_value, meta)
 
-    :ets.insert(name, {key, value})
+    :ets.insert(table, {key, value})
 
     :ok
   end
 
-  def put(name, metric_name, :sum, value, meta) do
+  def put(table, metric_name, :sum, value, meta) do
     key = make_key(metric_name, :sum, meta)
 
-    put_counter_type(name, key, value)
+    put_counter_type(table, key, value)
 
     :ok
   end
 
-  def put(name, metric_name, :summary, value, meta) do
+  def put(table, metric_name, :summary, value, meta) do
     key = make_key(metric_name, :summary, meta)
 
     summary =
-      case :ets.lookup(name, key) do
+      case :ets.lookup(table, key) do
         [{^key, last_summary}] -> Summary.update(last_summary, value)
         [] -> Summary.new(value)
       end
 
-    :ets.insert(name, {key, summary})
+    :ets.insert(table, {key, summary})
 
     :ok
   end
@@ -118,11 +121,11 @@ defmodule Mobius.MetricsTable do
   @doc """
   Remove a metric from the metric table
   """
-  @spec remove(Mobius.name(), Mobius.metric_name(), Mobius.metric_type(), map()) :: :ok
-  def remove(name, metric_name, type, meta \\ %{}) do
+  @spec remove(Mobius.instance(), Mobius.metric_name(), Mobius.metric_type(), map()) :: :ok
+  def remove(table, metric_name, type, meta \\ %{}) do
     key = make_key(metric_name, type, meta)
 
-    true = :ets.delete(name, key)
+    true = :ets.delete(table, key)
 
     :ok
   end
@@ -130,24 +133,24 @@ defmodule Mobius.MetricsTable do
   @doc """
   Increment a counter metric
   """
-  @spec inc_counter(Mobius.name(), Mobius.metric_name(), map()) :: :ok
-  def inc_counter(name, event_name, meta \\ %{}) do
-    put(name, event_name, :counter, 1, meta)
+  @spec inc_counter(Mobius.instance(), Mobius.metric_name(), map()) :: :ok
+  def inc_counter(table, event_name, meta \\ %{}) do
+    put(table, event_name, :counter, 1, meta)
   end
 
   @doc """
   Update a sum metric type
   """
-  @spec update_sum(Mobius.name(), Mobius.metric_name(), integer(), map()) :: :ok
-  def update_sum(name, metric_name, value, meta \\ %{}) do
-    put(name, metric_name, :sum, value, meta)
+  @spec update_sum(Mobius.instance(), Mobius.metric_name(), integer(), map()) :: :ok
+  def update_sum(table, metric_name, value, meta \\ %{}) do
+    put(table, metric_name, :sum, value, meta)
   end
 
   @doc """
   Get all entries in the table
   """
-  @spec get_entries(Mobius.name()) :: [metric_entry()]
-  def get_entries(name) do
+  @spec get_entries(Mobius.instance()) :: [metric_entry()]
+  def get_entries(table) do
     ms = [
       {
         {{:"$1", :"$2", :"$3"}, :"$4"},
@@ -156,19 +159,19 @@ defmodule Mobius.MetricsTable do
       }
     ]
 
-    :ets.select(name, ms)
+    :ets.select(table, ms)
   end
 
   @doc """
   Get metrics by event name
   """
-  @spec get_entries_by_event_name(Mobius.name(), Mobius.metric_name()) :: [metric_entry()]
-  def get_entries_by_event_name(name, event_name) do
+  @spec get_entries_by_event_name(Mobius.instance(), Mobius.metric_name()) :: [metric_entry()]
+  def get_entries_by_event_name(table, event_name) do
     ms = [
       {{{:"$1", :"$2", :"$3"}, :"$4"}, [{:==, :"$1", event_name}],
        [{{:"$1", :"$2", :"$4", :"$3"}}]}
     ]
 
-    :ets.select(name, ms)
+    :ets.select(table, ms)
   end
 end

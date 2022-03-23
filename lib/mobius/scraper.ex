@@ -13,11 +13,11 @@ defmodule Mobius.Scraper do
   """
   @spec start_link([Mobius.arg()]) :: GenServer.on_start()
   def start_link(args) do
-    GenServer.start_link(__MODULE__, args, name: name(args[:name]))
+    GenServer.start_link(__MODULE__, args, name: name(args[:mobius_instance]))
   end
 
-  defp name(mobius_name) do
-    Module.concat(__MODULE__, mobius_name)
+  defp name(mobius_instance) do
+    Module.concat(__MODULE__, mobius_instance)
   end
 
   @typedoc """
@@ -31,16 +31,16 @@ defmodule Mobius.Scraper do
   @doc """
   Get all the records
   """
-  @spec all(Mobius.name(), [all_opt()]) :: [Mobius.record()]
-  def all(name, opts \\ []) do
-    GenServer.call(name(name), {:get, opts})
+  @spec all(Mobius.instance(), [all_opt()]) :: [Mobius.record()]
+  def all(instance, opts \\ []) do
+    GenServer.call(name(instance), {:get, opts})
   end
 
   @doc """
   Persist the metrics to disk
   """
-  @spec save(Mobius.name()) :: :ok | {:error, reason :: term()}
-  def save(name), do: GenServer.call(name(name), :save)
+  @spec save(Mobius.instance()) :: :ok | {:error, reason :: term()}
+  def save(instance), do: GenServer.call(name(instance), :save)
 
   @impl GenServer
   def init(args) do
@@ -57,7 +57,7 @@ defmodule Mobius.Scraper do
 
   defp state_from_args(args) do
     args
-    |> Keyword.take([:name, :persistence_dir])
+    |> Keyword.take([:mobius_instance, :persistence_dir])
     |> Enum.into(%{})
   end
 
@@ -115,7 +115,7 @@ defmodule Mobius.Scraper do
 
   @impl GenServer
   def handle_info(:scrape, state) do
-    case MetricsTable.get_entries(state.name) do
+    case MetricsTable.get_entries(state.mobius_instance) do
       [] ->
         {:noreply, state}
 

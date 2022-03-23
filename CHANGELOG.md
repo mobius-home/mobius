@@ -14,6 +14,9 @@ any time. The public API SHOULD NOT be considered stable.
 * `Mobius.plot/3` is now `Mobius.Exports.plot/4`
 * `Mobius.to_csv/3` is now `Mobius.Exports.csv/4`
 * `Mobius.filter_metrics/3` is now `Mobius.Exports.metrics/4`
+* `Mobius.name()` is now `Mobius.instance()`
+*  Mobius functions that need to know the name of the mobius instance now
+  expect `:mobius_instance` and not `:name`
 
 ### Removed
 

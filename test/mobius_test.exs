@@ -7,7 +7,7 @@ defmodule MobiusTest do
     persistence_dir: @persistence_dir,
     metrics: []
   ]
-  @default_name "mobius"
+  @default_instance_str "mobius"
 
   setup do
     File.rm_rf!(@persistence_dir)
@@ -19,7 +19,7 @@ defmodule MobiusTest do
   end
 
   test "does not crash with a corrupt history file" do
-    persistence_path = Path.join(@persistence_dir, @default_name)
+    persistence_path = Path.join(@persistence_dir, @default_instance_str)
     File.mkdir_p(persistence_path)
     File.write!(file(persistence_path), <<>>)
 
@@ -29,16 +29,16 @@ defmodule MobiusTest do
   end
 
   test "can save persistence data" do
-    persistence_path = Path.join(@persistence_dir, @default_name)
+    persistence_path = Path.join(@persistence_dir, @default_instance_str)
     {:ok, _pid} = start_supervised({Mobius, @default_args})
 
-    assert :ok = Mobius.save(@default_name)
+    assert :ok = Mobius.save(@default_instance_str)
     assert File.exists?(Path.join(persistence_path, "history"))
     assert File.exists?(Path.join(persistence_path, "metrics_table"))
   end
 
   test "can autosave persistence data" do
-    persistence_path = Path.join(@persistence_dir, @default_name)
+    persistence_path = Path.join(@persistence_dir, @default_instance_str)
     {:ok, _pid} = start_supervised({Mobius, @default_args ++ [autosave_interval: 1]})
     refute File.exists?(Path.join(persistence_path, "history"))
 
