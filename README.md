@@ -96,10 +96,10 @@ end
 ### Charting historical metrics
 
 Mobius tracks metrics overtime in a circular buffer and allows you to graph
-metric values over time using `Mobius.plot/3`:
+metric values over time using `Mobius.Exports.plot/4`:
 
 ```elixir
-iex> Mobius.plot("vm.memory.total")
+iex> Mobius.Exports.plot("vm.memory.total")
                 Metric Name: vm.memory.total, Tags: %{}
 
 34355808.00 ┤

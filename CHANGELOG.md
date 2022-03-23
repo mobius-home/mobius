@@ -4,7 +4,34 @@
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> Major version zero (0.y.z) is for initial development. Anything MAY change at any time. The public API SHOULD NOT be considered stable.
+> Major version zero (0.y.z) is for initial development. Anything MAY change at
+any time. The public API SHOULD NOT be considered stable.
+
+## [Unreleased]
+
+### Changed
+
+* `Mobius.plot/3` is now `Mobius.Exports.plot/4`
+* `Mobius.to_csv/3` is now `Mobius.Exports.csv/4`
+* `Mobius.filter_metrics/3` is now `Mobius.Exports.metrics/4`
+
+### Removed
+
+* `Mobius.filter_opt()` type
+* `Mobius.csv_opt()` type
+* `Mobius.plot_opt()` type
+* `Mobius.query_opts/1` function
+
+### Added
+
+* `Mobius.Exports` module for APIs concerning retrieving historical data in
+  various formats
+* `Mobius.Exports.csv/4` generates a CSV either as a string, to the console, or
+  to a file
+* `Mobius.Exports.series/4` generates a series for historical data
+* `Mobius.Exports.metrics/4` retrieves the raw historical metric data
+* `Mobius.Exports.plot/4` generates a line plot to the console
+* `Mobius.Exports.UnsupportedMetricError`
 
 ## [v0.3.7] - 2022-03-16
 
