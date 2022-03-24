@@ -19,7 +19,7 @@ defmodule Mobius.Exports do
   alias Mobius.Exports.UnsupportedMetricError
 
   @typedoc """
-  Options to use when exporing time series metric data
+  Options to use when exporting time series metric data
 
   * `:mobius_instance` - the name of the Mobius instance you are using. Unless
     you specified this in your configuration you should be safe to allow this
