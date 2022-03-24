@@ -4,20 +4,21 @@ defmodule Mobius.MetricsTable do
   # Table for tracking current state of metrics
 
   # Internal table object structure
-  # {{metric_name, metric_type, metadata}, value}
+  # {{normalize_metric_name, metric_type, metadata}, value}
 
   # External object structure
-  # {name, type, value, meta}
+  # {string_metric_name, type, value, meta}
 
   @typedoc """
   A single entry of a metric in the metric table
   """
   @type metric_entry() ::
-          {Telemetry.Metrics.metric_name(), Mobius.metric_type(), integer(), map()}
+          {Mobius.metric_name(), Mobius.metric_type(), integer(), map()}
 
   require Logger
 
   alias Mobius.Summary
+  alias Telemetry.Metrics
 
   @doc """
   Initialize the metrics table
@@ -65,7 +66,13 @@ defmodule Mobius.MetricsTable do
   @doc """
   Put the metric information in to the metric table
   """
-  @spec put(Mobius.instance(), Mobius.metric_name(), Mobius.metric_type(), integer(), map()) ::
+  @spec put(
+          Mobius.instance(),
+          Metrics.normalized_metric_name(),
+          Mobius.metric_type(),
+          integer(),
+          map()
+        ) ::
           :ok
   def put(table, event_name, type, value, meta \\ %{})
 
@@ -121,7 +128,8 @@ defmodule Mobius.MetricsTable do
   @doc """
   Remove a metric from the metric table
   """
-  @spec remove(Mobius.instance(), Mobius.metric_name(), Mobius.metric_type(), map()) :: :ok
+  @spec remove(Mobius.instance(), Metrics.normalized_metric_name(), Mobius.metric_type(), map()) ::
+          :ok
   def remove(table, metric_name, type, meta \\ %{}) do
     key = make_key(metric_name, type, meta)
 
@@ -133,7 +141,7 @@ defmodule Mobius.MetricsTable do
   @doc """
   Increment a counter metric
   """
-  @spec inc_counter(Mobius.instance(), Mobius.metric_name(), map()) :: :ok
+  @spec inc_counter(Mobius.instance(), Metrics.normalized_metric_name(), map()) :: :ok
   def inc_counter(table, event_name, meta \\ %{}) do
     put(table, event_name, :counter, 1, meta)
   end
@@ -141,7 +149,7 @@ defmodule Mobius.MetricsTable do
   @doc """
   Update a sum metric type
   """
-  @spec update_sum(Mobius.instance(), Mobius.metric_name(), integer(), map()) :: :ok
+  @spec update_sum(Mobius.instance(), Metrics.normalized_metric_name(), integer(), map()) :: :ok
   def update_sum(table, metric_name, value, meta \\ %{}) do
     put(table, metric_name, :sum, value, meta)
   end
@@ -159,19 +167,36 @@ defmodule Mobius.MetricsTable do
       }
     ]
 
-    :ets.select(table, ms)
+    table
+    |> :ets.select(ms)
+    |> Enum.map(fn {name, type, value, tags} ->
+      {normalized_name_to_string(name), type, value, tags}
+    end)
   end
 
   @doc """
   Get metrics by event name
   """
-  @spec get_entries_by_event_name(Mobius.instance(), Mobius.metric_name()) :: [metric_entry()]
-  def get_entries_by_event_name(table, event_name) do
+  @spec get_entries_by_metric_name(Mobius.instance(), Mobius.metric_name()) :: [metric_entry()]
+  def get_entries_by_metric_name(table, metric_name) do
+    normalized_name =
+      metric_name
+      |> String.split(".", trim: true)
+      |> Enum.map(&String.to_existing_atom/1)
+
     ms = [
-      {{{:"$1", :"$2", :"$3"}, :"$4"}, [{:==, :"$1", event_name}],
+      {{{:"$1", :"$2", :"$3"}, :"$4"}, [{:==, :"$1", normalized_name}],
        [{{:"$1", :"$2", :"$4", :"$3"}}]}
     ]
 
-    :ets.select(table, ms)
+    table
+    |> :ets.select(ms)
+    |> Enum.map(fn {name, type, value, tags} ->
+      {normalized_name_to_string(name), type, value, tags}
+    end)
+  end
+
+  defp normalized_name_to_string(normalized_name) do
+    Enum.join(normalized_name, ".")
   end
 end
