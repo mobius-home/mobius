@@ -54,7 +54,8 @@ defmodule Mobius.Exports.Metrics do
     |> Enum.flat_map(fn
       {^metric_name, type, value, metric_tags} ->
         if match?(^tags, metric_tags) and matches_type?(type, required_type) do
-          [%{type: type, value: value, tags: metric_tags, timestamp: timestamp}]
+          name = Enum.join(metric_name, ".")
+          [%{type: type, value: value, tags: metric_tags, timestamp: timestamp, name: name}]
         else
           []
         end

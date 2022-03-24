@@ -1,5 +1,4 @@
 defmodule Example do
-
   def simulate_vintage_qmi_connection_event(ifname, connection_status) do
     :telemetry.execute(
       [:vintage_net_qmi, :connection],
