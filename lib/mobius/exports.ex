@@ -12,11 +12,11 @@ defmodule Mobius.Exports do
   The Mobius Binary Format (MBF) is a format that contains the current state of
   all metrics. This binary format is useful for transfer metric information in
   a useful format to another services to parse and use. For more details see
-  `to_mbf/1`.
+  `mbf/1`.
   """
 
-  alias Mobius.Exports.MobiusBinaryFormat
-  alias Mobius.Exports.UnsupportedMetricError
+  alias Mobius.MetricData
+  alias Mobius.Exports.{MobiusBinaryFormat, UnsupportedMetricError}
 
   @typedoc """
   Options to use when exporting time series metric data
@@ -242,14 +242,15 @@ defmodule Mobius.Exports do
   The generated file is returned in the as `{:ok, filename}`. The format of the
   file name is `YYYYMMDDHHMMSS-metrics.mbf`.
 
-  See `Mobius.Exports.from_mbf/1` to parse a binary in MBF.
+  See `Mobius.Exports.parse_mbf/1` to parse a binary in MBF.
   """
-  @spec to_mbf([mfb_export_opt()]) :: binary() | {:ok, Path.t()} | {:error, Mobius.FileError.t()}
-  def to_mbf(opts \\ []) do
+  @spec mbf([mfb_export_opt()]) :: binary() | {:ok, Path.t()} | {:error, Mobius.FileError.t()}
+  def mbf(opts \\ []) do
     mobius_instance = opts[:mobius_instance] || :mobius
 
     mobius_instance
     |> Mobius.Scraper.all()
+    |> MetricData.to_metric_rows(filter_types: [:summary])
     |> MobiusBinaryFormat.to_iodata()
     |> maybe_write_file(opts)
   end
@@ -291,9 +292,9 @@ defmodule Mobius.Exports do
   @doc """
   Parse the mobius binary format into a list of metrics
   """
-  @spec from_mbf(binary()) ::
+  @spec parse_mbf(binary()) ::
           {:ok, [Mobius.metric()]} | {:error, Mobius.Exports.MBFParseError.t()}
-  def from_mbf(binary) do
+  def parse_mbf(binary) do
     MobiusBinaryFormat.parse(binary)
   end
 end
