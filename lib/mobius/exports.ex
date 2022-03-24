@@ -128,7 +128,7 @@ defmodule Mobius.Exports do
   Mobius.Exports.metrics("vm.memory.total", :last_value, %{}, last: {2, :hour})
   ```
   """
-  @spec metrics(binary(), Mobius.metric_type(), map(), [export_opt()] | keyword()) ::
+  @spec metrics(Mobius.metric_name(), Mobius.metric_type(), map(), [export_opt()] | keyword()) ::
           {:ok, [Mobius.metric()]} | {:error, UnsupportedMetricError.t()}
   def metrics(metric_name, type, tags, opts \\ [])
 
@@ -192,7 +192,7 @@ defmodule Mobius.Exports do
   Mobius.Export.plot("vm.memory.total", :last_value, %{}, last: {2, :hour})
   ```
   """
-  @spec plot(binary(), Mobius.metric_type(), map(), [export_opt()]) :: :ok
+  @spec plot(Mobius.metric_name(), Mobius.metric_type(), map(), [export_opt()]) :: :ok
   def plot(metric_name, type, tags \\ %{}, opts \\ []) do
     with {:ok, series} <- series(metric_name, type, tags, opts),
          {:ok, plot} <- Mobius.Asciichart.plot(series, height: 12) do

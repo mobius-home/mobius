@@ -39,7 +39,12 @@ defmodule Mobius do
 
   @type metric_type() :: :counter | :last_value | :sum | :summary
 
-  @type metric_name() :: [atom()]
+  @typedoc """
+  The name of the metric
+
+  Example: `"vm.memory.total"`
+  """
+  @type metric_name() :: binary()
 
   @typedoc """
   A single metric data point
@@ -147,16 +152,16 @@ defmodule Mobius do
   def info(instance) do
     instance
     |> MetricsTable.get_entries()
-    |> Enum.group_by(fn {event_name, _type, _value, meta} -> {event_name, meta} end)
-    |> Enum.each(fn {{event_name, meta}, metrics} ->
+    |> Enum.group_by(fn {metric_name, _type, _value, meta} -> {metric_name, meta} end)
+    |> Enum.each(fn {{metric_name, meta}, metrics} ->
       reports =
-        Enum.map(metrics, fn {_event_name, type, value, _meta} ->
+        Enum.map(metrics, fn {_metric_name, type, value, _meta} ->
           "#{to_string(type)}: #{inspect(format_value(type, value))}\n"
         end)
 
       [
         "Metric Name: ",
-        Enum.join(event_name, "."),
+        metric_name,
         "\n",
         "Tags: #{inspect(meta)}\n",
         reports

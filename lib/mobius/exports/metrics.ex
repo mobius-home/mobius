@@ -15,7 +15,6 @@ defmodule Mobius.Exports.Metrics do
     start_t = System.monotonic_time()
     prefix = [:mobius, :export, :metrics]
 
-    parsed_metric_name = parse_metric_name(metric_name)
     scraper_opts = query_opts(opts)
 
     # Notify telemetry we are starting query
@@ -30,7 +29,7 @@ defmodule Mobius.Exports.Metrics do
     rows =
       Scraper.all(mobius_instance, scraper_opts)
       |> Enum.flat_map(fn {timestamp, metrics} ->
-        rows_from_metrics(metrics, parsed_metric_name, tags, timestamp, type)
+        rows_from_metrics(metrics, metric_name, tags, timestamp, type)
       end)
 
     # Notify telemetry we finished query
@@ -46,16 +45,20 @@ defmodule Mobius.Exports.Metrics do
     rows
   end
 
-  defp parse_metric_name(metric_name),
-    do: metric_name |> String.split(".", trim: true) |> Enum.map(&String.to_existing_atom/1)
-
   defp rows_from_metrics(metrics, metric_name, tags, timestamp, required_type) do
     metrics
     |> Enum.flat_map(fn
       {^metric_name, type, value, metric_tags} ->
         if match?(^tags, metric_tags) and matches_type?(type, required_type) do
-          name = Enum.join(metric_name, ".")
-          [%{type: type, value: value, tags: metric_tags, timestamp: timestamp, name: name}]
+          [
+            %{
+              type: type,
+              value: value,
+              tags: metric_tags,
+              timestamp: timestamp,
+              name: metric_name
+            }
+          ]
         else
           []
         end
