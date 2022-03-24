@@ -39,8 +39,8 @@ any time. The public API SHOULD NOT be considered stable.
 * `Mobius.Exports.series/4` generates a series for historical data
 * `Mobius.Exports.metrics/4` retrieves the raw historical metric data
 * `Mobius.Exports.plot/4` generates a line plot to the console
-* `Mobius.Exports.to_mbf/1` generates a binary that contains all current metrics
-* `Mobius.Exports.from_mbf/1` parses a binary that is in the Mobius Binary Format
+* `Mobius.Exports.mbf/1` generates a binary that contains all current metrics
+* `Mobius.Exports.parse_mbf/1` parses a binary that is in the Mobius Binary Format
 * `Mobius.Exports.UnsupportedMetricError`
 * `Mobius.Exports.MBFParseError`
 * `Mobius.FileError`

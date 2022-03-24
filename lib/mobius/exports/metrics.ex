@@ -3,7 +3,7 @@ defmodule Mobius.Exports.Metrics do
 
   # Module for exporting metrics
 
-  alias Mobius.{Exports, Scraper}
+  alias Mobius.{Exports, MetricData, Scraper}
 
   @doc """
   Export metrics
@@ -28,9 +28,7 @@ defmodule Mobius.Exports.Metrics do
 
     rows =
       Scraper.all(mobius_instance, scraper_opts)
-      |> Enum.flat_map(fn {timestamp, metrics} ->
-        rows_from_metrics(metrics, metric_name, tags, timestamp, type)
-      end)
+      |> MetricData.to_metric_rows_for_metric(metric_name, type, tags)
 
     # Notify telemetry we finished query
     duration = System.monotonic_time() - start_t
@@ -44,34 +42,6 @@ defmodule Mobius.Exports.Metrics do
 
     rows
   end
-
-  defp rows_from_metrics(metrics, metric_name, tags, timestamp, required_type) do
-    metrics
-    |> Enum.flat_map(fn
-      {^metric_name, type, value, metric_tags} ->
-        if match?(^tags, metric_tags) and matches_type?(type, required_type) do
-          [
-            %{
-              type: type,
-              value: value,
-              tags: metric_tags,
-              timestamp: timestamp,
-              name: metric_name
-            }
-          ]
-        else
-          []
-        end
-
-      _metric ->
-        []
-    end)
-  end
-
-  defp matches_type?(_type, nil), do: true
-
-  defp matches_type?(type, type), do: true
-  defp matches_type?(_, _), do: false
 
   defp query_opts(opts) do
     if opts[:from] do
