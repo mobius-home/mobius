@@ -51,3 +51,54 @@ defmodule Mobius.Exports.UnsupportedMetricError do
     }
   end
 end
+
+defmodule Mobius.Exports.MBFParseError do
+  @moduledoc """
+  Use when there is an error parsing a Mobius Binary Format (MBF) binary
+  """
+
+  @type t() :: %__MODULE__{
+          message: binary(),
+          error: atom()
+        }
+
+  defexception [:message, :error]
+
+  @impl Exception
+  def exception(error) do
+    %__MODULE__{
+      error: error,
+      message: "Error parsing mobius binary format binary because #{inspect(error)}"
+    }
+  end
+end
+
+defmodule Mobius.FileError do
+  @moduledoc """
+  Used when there is an error conducting file operations
+  """
+
+  defexception [:message, :error, :file, :operation]
+
+  @type t() :: %__MODULE__{
+          message: binary(),
+          error: atom(),
+          file: Path.t(),
+          operation: binary()
+        }
+
+  @impl Exception
+  def exception(opts) do
+    error = Keyword.fetch!(opts, :error)
+    file = Keyword.fetch!(opts, :file)
+    operation = Keyword.fetch!(opts, :operation)
+
+    %__MODULE__{
+      error: error,
+      message:
+        "Could not #{inspect(operation)} file #{inspect(file)} for reason: {inspect(error)}",
+      file: file,
+      operation: operation
+    }
+  end
+end

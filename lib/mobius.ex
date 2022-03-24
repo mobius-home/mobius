@@ -41,7 +41,23 @@ defmodule Mobius do
 
   @type metric_name() :: [atom()]
 
-  @type metric() :: %{type: metric_type(), value: term(), tags: map(), timestamp: integer()}
+  @typedoc """
+  A single metric data point
+
+  * `:type` - the type of the metric
+  * `:value` - the value of the measurement for the metric
+  * `:tags` - a map of the tags for the metric
+  * `:timestamp` - the naive time in seconds the metric was sampled
+  * `:name` - the name of the metric
+  """
+  @type metric() :: %{
+          type: metric_type(),
+          value: term(),
+          tags: map(),
+          timestamp: integer(),
+          name: binary()
+        }
+
   @type timestamp() :: integer()
 
   @typedoc """

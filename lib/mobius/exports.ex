@@ -7,8 +7,15 @@ defmodule Mobius.Exports do
   * CSV
   * Series
   * Line plot
+  * Mobius Binary Format (MBF)
+
+  The Mobius Binary Format (MBF) is a format that contains the current state of
+  all metrics. This binary format is useful for transfer metric information in
+  a useful format to another services to parse and use. For more details see
+  `to_mbf/1`.
   """
 
+  alias Mobius.Exports.MobiusBinaryFormat
   alias Mobius.Exports.UnsupportedMetricError
 
   @typedoc """
@@ -207,5 +214,86 @@ defmodule Mobius.Exports do
     else
       error -> error
     end
+  end
+
+  @type mfb_export_opt() :: {:out_dir, Path.t()} | export_opt()
+
+  @doc """
+  Export all metrics in the Mobius Binary Format (MBF)
+
+  This is most useful for when you want to share metric data to different
+  networked services.
+
+  The binary format is `<<version, metric_data::binary>>`
+
+  The first byte is the version number of the following metric data. Currently,
+  the version number is `1`.
+
+  The metric data binary is the type of `[Mobius.metric()]` encoded in Binary
+  ERlang Term format (BERT) and compressed (using Zlib compression).
+
+  Optionally, `to_mbf/1` can write the binary to a file using the `:out_dir`
+  option.
+
+  ```elixir
+  Mobius.Exports.to_mbf(out_dir: "/my/dir")
+  ```
+
+  The generated file is returned in the as `{:ok, filename}`. The format of the
+  file name is `YYYYMMDDHHMMSS-metrics.mbf`.
+
+  See `Mobius.Exports.from_mbf/1` to parse a binary in MBF.
+  """
+  @spec to_mbf([mfb_export_opt()]) :: binary() | {:ok, Path.t()} | {:error, Mobius.FileError.t()}
+  def to_mbf(opts \\ []) do
+    mobius_instance = opts[:mobius_instance] || :mobius
+
+    mobius_instance
+    |> Mobius.Scraper.all()
+    |> MobiusBinaryFormat.to_iodata()
+    |> maybe_write_file(opts)
+  end
+
+  defp maybe_write_file(iodata, opts) do
+    case opts[:out_dir] do
+      nil ->
+        IO.iodata_to_binary(iodata)
+
+      out_dir ->
+        file_name = gen_mbf_file_name()
+        out_file = Path.join(out_dir, file_name)
+        write_file(out_file, iodata)
+    end
+  end
+
+  defp write_file(file, iodata) do
+    case File.write(file, iodata) do
+      :ok ->
+        {:ok, file}
+
+      {:error, reason} ->
+        {:error, Mobius.FileError.exception(reason: reason, file: file, operation: "write")}
+    end
+  end
+
+  defp gen_mbf_file_name() do
+    "#{file_timestamp()}-metrics.mbf"
+  end
+
+  defp file_timestamp() do
+    {{y, m, d}, {hh, mm, ss}} = :calendar.universal_time()
+    "#{y}#{pad(m)}#{pad(d)}#{pad(hh)}#{pad(mm)}#{pad(ss)}"
+  end
+
+  defp pad(i) when i < 10, do: <<?0, ?0 + i>>
+  defp pad(i), do: to_string(i)
+
+  @doc """
+  Parse the mobius binary format into a list of metrics
+  """
+  @spec from_mbf(binary()) ::
+          {:ok, [Mobius.metric()]} | {:error, Mobius.Exports.MBFParseError.t()}
+  def from_mbf(binary) do
+    MobiusBinaryFormat.parse(binary)
   end
 end

@@ -16,7 +16,7 @@ any time. The public API SHOULD NOT be considered stable.
 * `Mobius.filter_metrics/3` is now `Mobius.Exports.metrics/4`
 * `Mobius.name()` is now `Mobius.instance()`
 *  Mobius functions that need to know the name of the mobius instance now
-  expect `:mobius_instance` and not `:name`
+   expect `:mobius_instance` and not `:name`
 
 ### Removed
 
@@ -34,7 +34,12 @@ any time. The public API SHOULD NOT be considered stable.
 * `Mobius.Exports.series/4` generates a series for historical data
 * `Mobius.Exports.metrics/4` retrieves the raw historical metric data
 * `Mobius.Exports.plot/4` generates a line plot to the console
+* `Mobius.Exports.to_mbf/1` generates a binary that contains all current metrics
+* `Mobius.Exports.from_mbf/1` parses a binary that is in the Mobius Binary Format
 * `Mobius.Exports.UnsupportedMetricError`
+* `Mobius.Exports.MBFParseError`
+* `Mobius.FileError`
+* `:name` field to `Mobius.metric()` type
 
 ## [v0.3.7] - 2022-03-16
 
