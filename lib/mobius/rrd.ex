@@ -2,17 +2,17 @@ defmodule Mobius.RRD do
   @moduledoc """
   A round robin database for Mobius
 
-  This is RRD is used by Mobius to store historicial metric data.
+  This is RRD is used by Mobius to store historical metric data.
 
   A round robin database (RRD) is a data store that a circular buffer to store
   information. As time moves forward the older data points get overwritten by
   newer data points. This type of data storage is useful for a consistent memory
-  footprint for timeseries data.
+  footprint for time series data.
 
   The `Mobius.RRD` implementation provides four resolutions. These are: seconds,
   minutes, hours, and days. Each resolution can be configured to allow for as
   many single data points as you see fit. For example, if you want to store three
-  days of data at an hour resolutin you can configure the RRD like so:
+  days of data at an hour resolution you can configure the RRD like so:
 
   ```elixir
   RRD.new(hours: 72)
@@ -55,7 +55,7 @@ defmodule Mobius.RRD do
   @typedoc """
   Options for the RRD
 
-  For resolution options you specifiy whitch resolution and the max number of
+  For resolution options you specify which resolution and the max number of
   metric data to keep for that resolution.
 
   For example, if the RRD were to track seconds up to five minutes it would need
