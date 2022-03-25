@@ -31,7 +31,7 @@ defmodule Mobius.Scraper do
   @doc """
   Get all the records
   """
-  @spec all(Mobius.instance(), [all_opt()]) :: [Mobius.record()]
+  @spec all(Mobius.instance(), [all_opt()]) :: [Mobius.metric()]
   def all(instance, opts \\ []) do
     GenServer.call(name(instance), {:get, opts})
   end
@@ -88,11 +88,22 @@ defmodule Mobius.Scraper do
     Path.join(state.persistence_dir, "history")
   end
 
+  defp to_metrics_list(timestamped_metrics) do
+    Enum.flat_map(timestamped_metrics, fn {_, metrics} ->
+      metrics
+    end)
+  end
+
   @impl GenServer
   def handle_call({:get, opts}, _from, state) do
     case Keyword.get(opts, :from) do
       nil ->
-        {:reply, RRD.all(state.database), state}
+        metrics =
+          state.database
+          |> RRD.all()
+          |> to_metrics_list()
+
+        {:reply, metrics, state}
 
       from ->
         {:reply, query_database(from, state, opts), state}
@@ -107,9 +118,11 @@ defmodule Mobius.Scraper do
     case opts[:to] do
       nil ->
         RRD.query(state.database, from)
+        |> to_metrics_list()
 
       to ->
         RRD.query(state.database, from, to)
+        |> to_metrics_list()
     end
   end
 
@@ -121,6 +134,7 @@ defmodule Mobius.Scraper do
 
       scrape ->
         ts = System.system_time(:second)
+        scrape = scrape_to_metrics_list(ts, scrape)
         database = RRD.insert(state.database, ts, scrape)
 
         {:noreply, %{state | database: database}}
@@ -134,6 +148,18 @@ defmodule Mobius.Scraper do
   @impl GenServer
   def terminate(_reason, state) do
     save_to_persistence(state)
+  end
+
+  defp scrape_to_metrics_list(ts, scrape) do
+    Enum.map(scrape, fn {name, type, value, tags} ->
+      %{
+        timestamp: ts,
+        name: name,
+        type: type,
+        value: value,
+        tags: tags
+      }
+    end)
   end
 
   # Write our database to persistent storage

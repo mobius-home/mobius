@@ -5,7 +5,7 @@ defmodule Mobius.ExportsTest do
   alias Mobius.Exports.MobiusBinaryFormat
 
   @tag :tmp_dir
-  test "export and parse version 1 Mobius Binary Format to binary", %{tmp_dir: tmp_dir} do
+  test "export and parse Mobius Binary Format to binary", %{tmp_dir: tmp_dir} do
     metrics = [
       Telemetry.Metrics.last_value("make.mbf.value"),
       Telemetry.Metrics.last_value("make.another.value")

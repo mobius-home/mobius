@@ -32,7 +32,7 @@ defmodule Mobius.RRD do
   to study.
   """
 
-  @serialization_version 1
+  @serialization_version 2
 
   require Logger
 
@@ -100,7 +100,7 @@ defmodule Mobius.RRD do
   @doc """
   Insert an item for the specified time
   """
-  @spec insert(t(), integer(), any()) :: t()
+  @spec insert(t(), integer(), [Mobius.metric()]) :: t()
   def insert(rrd, ts, item) do
     value = {ts, item}
 
@@ -155,13 +155,19 @@ defmodule Mobius.RRD do
   The `rrd` that's passed in is expected to be a new one without any entries.
   """
   @spec load(t(), binary()) :: {:ok, t()} | {:error, Mobius.DataLoadError.t()}
-  def load(rrd, <<@serialization_version, data::binary>>) do
-    decoded =
-      data
-      |> :erlang.binary_to_term()
-      |> Enum.reduce(rrd, fn {ts, item}, tlb -> insert(tlb, ts, item) end)
+  def load(rrd, <<1, data::binary>>) do
+    data
+    |> :erlang.binary_to_term()
+    |> migrate_data(1)
+    |> do_load(rrd)
+  catch
+    _, _ -> {:error, Mobius.DataLoadError.exception(reason: :corrupt, who: rrd)}
+  end
 
-    {:ok, decoded}
+  def load(rrd, <<@serialization_version, data::binary>>) do
+    data
+    |> :erlang.binary_to_term()
+    |> do_load(rrd)
   catch
     _, _ -> {:error, Mobius.DataLoadError.exception(reason: :corrupt, who: rrd)}
   end
@@ -170,18 +176,50 @@ defmodule Mobius.RRD do
     {:error, Mobius.DataLoadError.exception(reason: :unsupported_version, who: rrd)}
   end
 
+  defp do_load(data, rrd) when is_list(data) do
+    loaded =
+      Enum.reduce(data, rrd, fn {ts, metrics}, new_rrd ->
+        insert(new_rrd, ts, metrics)
+      end)
+
+    {:ok, loaded}
+  end
+
+  # migrate data from version 1 to current
+  defp migrate_data(data, 1) do
+    Enum.map(data, fn {timestamp, metrics} ->
+      metrics =
+        Enum.map(metrics, fn {name, type, value, tags} ->
+          name = Enum.join(name, ".")
+          %{name: name, type: type, value: value, tags: tags, timestamp: timestamp}
+        end)
+
+      {timestamp, metrics}
+    end)
+  end
+
+  @typedoc """
+  Options for saving RRD into a binary
+
+  * `:serialization_version` - the version of serialization format, defaults to
+    most recent
+  """
+  @type save_opt() :: {:serialization_version, 1 | 2}
+
   @doc """
   Serialize to an iolist
   """
-  @spec save(t()) :: iolist()
-  def save(rrd) do
-    [@serialization_version, :erlang.term_to_iovec(all(rrd))]
+  @spec save(t(), [save_opt()]) :: iolist()
+  def save(rrd, opts \\ []) do
+    serialization_version = opts[:serialization_version] || @serialization_version
+
+    [serialization_version, :erlang.term_to_iovec(all(rrd))]
   end
 
   @doc """
   Return all items in order
   """
-  @spec all(t()) :: [{integer(), any()}]
+  @spec all(t()) :: [{Mobius.timestamp(), [Mobius.metric()]}]
   def all(rrd) do
     result =
       CircularBuffer.to_list(rrd.day) ++
