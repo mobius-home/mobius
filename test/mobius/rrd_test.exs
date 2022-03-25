@@ -35,14 +35,39 @@ defmodule Mobius.RRDTest do
     assert RRD.query(buffer, 3001) == []
   end
 
-  test "turn into a binary" do
-    buffer =
-      RRD.new(@args)
-      |> RRD.insert(1234, :first)
-      |> RRD.insert(3000, :second)
+  describe "serialize and decode" do
+    test "version 1" do
+      in_rrd =
+        RRD.new(@args)
+        |> RRD.insert(1234, [{[:vm, :memory, :total], :last_value, 123, %{}}])
+        |> RRD.insert(3000, [{[:vm, :memory, :total], :last_value, 124, %{}}])
 
-    buffer_bin = RRD.save(buffer) |> IO.iodata_to_binary()
-    assert RRD.load(RRD.new(@args), buffer_bin) == {:ok, buffer}
+      expected_rrd =
+        RRD.new(@args)
+        |> RRD.insert(1234, [
+          %{name: "vm.memory.total", type: :last_value, value: 123, tags: %{}, timestamp: 1234}
+        ])
+        |> RRD.insert(3000, [
+          %{name: "vm.memory.total", type: :last_value, value: 124, tags: %{}, timestamp: 3000}
+        ])
+
+      in_rrd_binary = RRD.save(in_rrd, serialization_version: 1) |> IO.iodata_to_binary()
+      assert RRD.load(RRD.new(@args), in_rrd_binary) == {:ok, expected_rrd}
+    end
+
+    test "version 2" do
+      rrd =
+        RRD.new(@args)
+        |> RRD.insert(1234, [
+          %{name: "vm.memory.total", type: :last_value, value: 123, tags: %{}, timestamp: 1234}
+        ])
+        |> RRD.insert(3000, [
+          %{name: "vm.memory.total", type: :last_value, value: 124, tags: %{}, timestamp: 3000}
+        ])
+
+      rrd_binary = RRD.save(rrd) |> IO.iodata_to_binary()
+      assert RRD.load(RRD.new(@args), rrd_binary) == {:ok, rrd}
+    end
   end
 
   test "fails to load corrupt binaries" do

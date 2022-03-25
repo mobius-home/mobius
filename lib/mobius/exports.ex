@@ -15,7 +15,6 @@ defmodule Mobius.Exports do
   `mbf/1`.
   """
 
-  alias Mobius.MetricData
   alias Mobius.Exports.{MobiusBinaryFormat, UnsupportedMetricError}
 
   @typedoc """
@@ -250,7 +249,7 @@ defmodule Mobius.Exports do
 
     mobius_instance
     |> Mobius.Scraper.all()
-    |> MetricData.to_metric_rows(filter_types: [:summary])
+    |> Enum.reject(fn metric -> metric.type == :summary end)
     |> MobiusBinaryFormat.to_iodata()
     |> maybe_write_file(opts)
   end
