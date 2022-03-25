@@ -3,11 +3,8 @@ defmodule Mobius.MetricsTable do
 
   # Table for tracking current state of metrics
 
-  # Internal table object structure
+  # MetricTable object structure
   # {{normalize_metric_name, metric_type, metadata}, value}
-
-  # External object structure
-  # {string_metric_name, type, value, meta}
 
   @typedoc """
   A single entry of a metric in the metric table

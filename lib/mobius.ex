@@ -5,7 +5,7 @@ defmodule Mobius do
 
   use Supervisor
 
-  alias Mobius.{Bundle, MetricsTable, Scraper, Summary}
+  alias Mobius.{MetricsTable, Scraper, Summary}
 
   alias Telemetry.Metrics
 
@@ -64,16 +64,6 @@ defmodule Mobius do
         }
 
   @type timestamp() :: integer()
-
-  @typedoc """
-  A list of data recorded data points tied to a particular timestamp
-  """
-  @type record() ::
-          {timestamp(),
-           [
-             {:telemetry.event_name(), Mobius.metric_type(), :telemetry.event_value(),
-              :telemetry.event_metadata()}
-           ]}
 
   @doc """
   Start Mobius
@@ -210,21 +200,5 @@ defmodule Mobius do
 
         error
     end
-  end
-
-  @type make_bundle_opt() :: {:mobius_instance, instance()}
-
-  @doc """
-  Function for creating a `Mobius.Bundle.t()`
-
-  This function makes a bundle that can be used with the functions in
-  `Mobius.Bundle`
-  """
-  @spec make_bundle(Bundle.target(), [make_bundle_opt()]) :: Bundle.t()
-  def make_bundle(bundle_target, opts \\ []) do
-    mobius_name = opts[:mobius_instance] || @default_args[:mobius_instance]
-    data = Scraper.all(mobius_name)
-
-    Bundle.new(bundle_target, data)
   end
 end

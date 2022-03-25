@@ -19,6 +19,9 @@ any time. The public API SHOULD NOT be considered stable.
   expect `:mobius_instance` and not `:name`
 * `Mobius.metric_name()` is no longer a list of `atoms()` but is not the metric
   name as a string
+* `Mobius.RRD` internal metric format
+* `Mobius.RRD.insert/3` typespec now expects `[Mobius.metric()]` as the last
+  parameter
 
 ### Removed
 
@@ -29,6 +32,9 @@ any time. The public API SHOULD NOT be considered stable.
 * `Mobius.to_csv/3` function
 * `Mobius.plot/3` function
 * `Mobius.filter_metrics/3` function
+* `Mobius.make_bundle/2` function (use `Mobius.mbf/1` instead)
+* `Mobius.Bundle` module
+* `Mobius.record()` type
 
 ### Added
 
