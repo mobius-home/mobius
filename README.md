@@ -11,7 +11,7 @@ Library for localized telemetry metrics
 ```elixir
 def deps do
   [
-    {:mobius, "~> 0.3.7"}
+    {:mobius, "~> 0.4.0"}
   ]
 end
 ```
@@ -37,6 +37,36 @@ def start(_type, _args) do
   opts = [strategy: :one_for_one, name: MyApp.Supervisor]
   Supervisor.start_link(children, opts)
 end
+```
+
+### Quick tips
+
+To see a view of the current metrics you can use `Mobius.info/0`:
+
+```elixir
+iex> Mobius.info()
+Metric Name: vm.memory.total
+Tags: %{}
+last_value: 83952736
+```
+
+To plot a metric measurement over time you can use:  `Mobius.Exports.plot/4`:
+
+```elixir
+iex> Mobius.Exports.plot("vm.memory.total", :last_value, %{})
+                Metric Name: vm.memory.total, Tags: %{}
+
+34355808.00 ┤
+34253736.73 ┤                                    ╭──╮    ╭────╮
+34151665.45 ┤                               ╭────╯  ╰────╯    ╰───
+34049594.18 ┤         ╭────╮    ╭────╮ ╭────╯
+33947522.91 ┤         │    ╰────╯    ╰─╯
+33845451.64 ┤         │
+33743380.36 ┤    ╭────╯
+33641309.09 ┤    │
+33539237.82 ┤    │
+33437166.55 ┤    │
+33335095.27 ┼────╯
 ```
 
 ### Configure persistence directory
@@ -93,36 +123,31 @@ def start(_type, _args) do
 end
 ```
 
-### Charting historical metrics
 
-Mobius tracks metrics overtime in a circular buffer and allows you to graph
-metric values over time using `Mobius.Exports.plot/4`:
+### Exporting data
 
-```elixir
-iex> Mobius.Exports.plot("vm.memory.total")
-                Metric Name: vm.memory.total, Tags: %{}
+The `Mobius.Exports` module provide functions for exporting the data in a couple
+different formats.
 
-34355808.00 ┤
-34253736.73 ┤                                    ╭──╮    ╭────╮
-34151665.45 ┤                               ╭────╯  ╰────╯    ╰───
-34049594.18 ┤         ╭────╮    ╭────╮ ╭────╯
-33947522.91 ┤         │    ╰────╯    ╰─╯
-33845451.64 ┤         │
-33743380.36 ┤    ╭────╯
-33641309.09 ┤    │
-33539237.82 ┤    │
-33437166.55 ┤    │
-33335095.27 ┼────╯
-```
-
-### Printing current metrics
-
-To see the current metrics you can use `Mobius.info/0`:
+1. CSV
+2. Series
+3. Line plot
+4. Mobius Binary Format
 
 ```elixir
-iex> Mobius.info()
+# export as CSV string
+Mobius.Exports.csv("vm.memory.total", :last_value, %{})
 
-Metric Name: vm.memory.total
-Tags: %{}
-last_value: 83952736
+# export as series list
+Mobius.Exports.series("vm.memory.total", :last_value, %{})
+
+# export as mobius binary format
+Mobius.Exports.mbf()
 ```
+
+The Mobius Binary Format (MBF) is a binary string that has encoded and
+compressed the all the historical metrics that mobius current has. This is
+most useful for preparing metrics to send off to another system. To parse
+the binary format you can use `Mobius.Exports.parse_mbf/1`.
+
+For each of these you can see the `Mobius.Exports` module for more details.

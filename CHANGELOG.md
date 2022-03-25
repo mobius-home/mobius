@@ -7,7 +7,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > Major version zero (0.y.z) is for initial development. Anything MAY change at
 any time. The public API SHOULD NOT be considered stable.
 
-## [Unreleased]
+## [v0.4.0] - 2022-03-25
 
 ### Changed
 
@@ -150,6 +150,7 @@ basic maintenance like dependency updates and documentation improvements
 
 Initial release!
 
+[v0.4.0]: https://github.com/mattludwigs/mobius/compare/v0.3.7...v0.4.0
 [v0.3.7]: https://github.com/mattludwigs/mobius/compare/v0.3.6...v0.3.7
 [v0.3.6]: https://github.com/mattludwigs/mobius/compare/v0.3.5...v0.3.6
 [v0.3.5]: https://github.com/mattludwigs/mobius/compare/v0.3.4...v0.3.5
