@@ -18,7 +18,7 @@ defmodule Mobius.Metrics.MetricsTableTest do
     assert result == [{"counter.event.hello", :counter, 1, %{}}]
   end
 
-  test "increament counter after first report", %{table: table} do
+  test "increment counter after first report", %{table: table} do
     :ok = MetricsTable.put(table, [:counter, :event, :world], :counter, 1)
     :ok = MetricsTable.put(table, [:counter, :event, :world], :counter, 1)
 
@@ -27,7 +27,7 @@ defmodule Mobius.Metrics.MetricsTableTest do
     assert result == [{"counter.event.world", :counter, 2, %{}}]
   end
 
-  test "increament counter with inc_counter/3", %{table: table} do
+  test "increment counter with inc_counter/3", %{table: table} do
     metric_name = "increment.helper.event"
 
     Enum.each(0..2, fn _ ->
