@@ -1,6 +1,6 @@
 # Mobius
 
-[![CircleCI](https://circleci.com/gh/mattludwigs/mobius/tree/main.svg?style=svg)](https://circleci.com/gh/mattludwigs/mobius/tree/main)
+[![CircleCI](https://circleci.com/gh/mobius-home/mobius/tree/main.svg?style=svg)](https://circleci.com/gh/mobius-home/mobius/tree/main)
 
 ![Mobius](assets/mobius-name.png)
 
