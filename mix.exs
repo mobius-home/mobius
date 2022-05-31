@@ -1,7 +1,7 @@
 defmodule Mobius.MixProject do
   use Mix.Project
 
-  @version "0.4.0"
+  @version "0.5.0"
 
   def project do
     [
@@ -42,7 +42,7 @@ defmodule Mobius.MixProject do
       extras: ["README.md", "CHANGELOG.md"],
       main: "readme",
       source_ref: "v#{@version}",
-      source_url: "https://github.com/mattludwigs/mobius",
+      source_url: "https://github.com/mobius-home/mobius",
       skip_undefined_reference_warnings_on: ["CHANGELOG.md"],
       assets: "assets",
       logo: "assets/m.png"
