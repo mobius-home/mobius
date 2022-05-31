@@ -3,7 +3,7 @@ defmodule Mobius.Exports.Metrics do
 
   # Module for exporting metrics
 
-  alias Mobius.{Exports, Scraper}
+  alias Mobius.{Exports, Scraper, Summary}
 
   @doc """
   Export metrics
@@ -43,7 +43,25 @@ defmodule Mobius.Exports.Metrics do
     rows
   end
 
+  defp filter_metrics_for_metric(metrics, metric_name, :summary, tags) do
+    do_filter_metrics_for_metric(metrics, metric_name, :summary, tags)
+    |> Enum.map(fn metric ->
+      %{metric | value: metric.value |> Summary.calculate()}
+    end)
+  end
+
+  defp filter_metrics_for_metric(metrics, metric_name, {:summary, summary_metric}, tags) do
+    do_filter_metrics_for_metric(metrics, metric_name, :summary, tags)
+    |> Enum.map(fn metric ->
+      %{metric | value: metric.value |> Summary.calculate() |> Map.get(summary_metric)}
+    end)
+  end
+
   defp filter_metrics_for_metric(metrics, metric_name, type, tags) do
+    do_filter_metrics_for_metric(metrics, metric_name, type, tags)
+  end
+
+  defp do_filter_metrics_for_metric(metrics, metric_name, type, tags) do
     Enum.filter(metrics, fn metric ->
       metric_name == metric.name && match?(^tags, metric.tags) && type == metric.type
     end)

@@ -64,7 +64,13 @@ defmodule Mobius.Exports do
   """
   @spec csv(binary(), Mobius.metric_type(), map(), [csv_export_opt()]) ::
           :ok | {:ok, binary()} | {:error, UnsupportedMetricError.t()}
-  def csv(metric_name, type, tags, opts \\ []) do
+  def csv(metric_name, type, tags, opts \\ [])
+
+  def csv(_metric_name, :summary, _tags, _opts) do
+    {:error, UnsupportedMetricError.exception(metric_type: :summary)}
+  end
+
+  def csv(metric_name, type, tags, opts) do
     case get_metrics(metric_name, type, tags, opts) do
       {:ok, metrics} ->
         export_opts = build_exporter_opts(metric_name, type, tags, opts)
@@ -126,16 +132,18 @@ defmodule Mobius.Exports do
   ```elixir
   Mobius.Exports.metrics("vm.memory.total", :last_value, %{}, last: {2, :hour})
   ```
+
+  Retrieving summary data can be performed by specifying the type: :summary - however, this returns
+  value data in the form of a map, which cannot be plotted or csv exported. To reduce the output to
+  a single metric value, use the form: {:summary, :summary_metric}
+
+  ```elixir
+  Mobius.Exports.metrics("vm.memory.total", {:summary, :average}, %{}, last: {2, :hour})
+  ```
   """
   @spec metrics(Mobius.metric_name(), Mobius.metric_type(), map(), [export_opt()] | keyword()) ::
           {:ok, [Mobius.metric()]} | {:error, UnsupportedMetricError.t()}
-  def metrics(metric_name, type, tags, opts \\ [])
-
-  def metrics(_metric_name, :summary, _tags, _opts) do
-    {:error, UnsupportedMetricError.exception(metric_type: :summary)}
-  end
-
-  def metrics(metric_name, type, tags, opts) do
+  def metrics(metric_name, type, tags, opts \\ []) do
     {:ok, Mobius.Exports.Metrics.export(metric_name, type, tags, opts)}
   end
 
@@ -190,9 +198,22 @@ defmodule Mobius.Exports do
   ```elixir
   Mobius.Export.plot("vm.memory.total", :last_value, %{}, last: {2, :hour})
   ```
+
+  Retrieving summary data can be performed by specifying type of the form:
+    {:summary, :summary_metric}
+
+  ```elixir
+  Mobius.Exports.metrics("vm.memory.total", {:summary, :average}, %{}, last: {2, :hour})
+  ```
   """
   @spec plot(Mobius.metric_name(), Mobius.metric_type(), map(), [export_opt()]) :: :ok
-  def plot(metric_name, type, tags \\ %{}, opts \\ []) do
+  def plot(metric_name, type, tags \\ %{}, opts \\ [])
+
+  def plot(_metric_name, :summary, _tags, _opts) do
+    {:error, UnsupportedMetricError.exception(metric_type: :summary)}
+  end
+
+  def plot(metric_name, type, tags, opts) do
     with {:ok, series} <- series(metric_name, type, tags, opts),
          {:ok, plot} <- Mobius.Asciichart.plot(series, height: 12) do
       chart = [
