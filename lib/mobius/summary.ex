@@ -4,7 +4,7 @@ defmodule Mobius.Summary do
   @typedoc """
   Calculated summary statistics
   """
-  @type t() :: %{min: integer(), max: integer(), average: integer()}
+  @type t() :: %{min: integer(), max: integer(), average: float(), std_dev: float()}
 
   @typedoc """
   A data type to store snapshot information about a summary in order
@@ -14,6 +14,7 @@ defmodule Mobius.Summary do
           min: integer(),
           max: integer(),
           accumulated: integer(),
+          accumulated_sqrd: integer(),
           reports: non_neg_integer()
         }
 
@@ -22,18 +23,25 @@ defmodule Mobius.Summary do
   """
   @spec new(integer()) :: data()
   def new(metric_value) do
-    %{min: metric_value, max: metric_value, accumulated: metric_value, reports: 1}
+    %{
+      min: metric_value,
+      max: metric_value,
+      accumulated: metric_value,
+      accumulated_sqrd: metric_value * metric_value,
+      reports: 1
+    }
   end
 
   @doc """
   Update a summary `data()` with new information based of a metric value
   """
-  @spec update(data(), non_neg_integer()) :: data()
+  @spec update(data(), integer()) :: data()
   def update(summary_data, new_metric_value) do
     %{
       min: min(summary_data.min, new_metric_value),
       max: max(summary_data.max, new_metric_value),
       accumulated: summary_data.accumulated + new_metric_value,
+      accumulated_sqrd: summary_data.accumulated_sqrd + new_metric_value * new_metric_value,
       reports: summary_data.reports + 1
     }
   end
@@ -46,7 +54,17 @@ defmodule Mobius.Summary do
     %{
       min: summary_data.min,
       max: summary_data.max,
-      average: round(summary_data.accumulated / summary_data.reports)
+      average: summary_data.accumulated / summary_data.reports,
+      std_dev:
+        std_dev(summary_data.accumulated, summary_data.accumulated_sqrd, summary_data.reports)
     }
+  end
+
+  defp std_dev(_sum, _sum_sqrd, 1), do: 0
+
+  # Naive algorithm. See Wikipedia
+  defp std_dev(sum, sum_sqrd, n) do
+    ((sum_sqrd - sum * sum / n) / (n - 1))
+    |> :math.sqrt()
   end
 end
