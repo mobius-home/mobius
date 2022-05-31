@@ -71,7 +71,11 @@ defmodule Mobius do
   Start Mobius
   """
   def start_link(args) do
-    Supervisor.start_link(__MODULE__, ensure_args(args), name: __MODULE__.Supervisor)
+    Supervisor.start_link(__MODULE__, ensure_args(args), name: name(args[:mobius_instance]))
+  end
+
+  defp name(instance) do
+    Module.concat(__MODULE__.Supervisor, instance)
   end
 
   @impl Supervisor
