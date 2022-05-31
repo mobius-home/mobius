@@ -62,7 +62,7 @@ defmodule Mobius.MixProject do
 
   defp dialyzer() do
     [
-      flags: [:unmatched_returns, :error_handling, :race_conditions],
+      flags: [:unmatched_returns, :error_handling],
       plt_add_apps: [:eex, :mix]
     ]
   end
