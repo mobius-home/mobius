@@ -123,7 +123,6 @@ def start(_type, _args) do
 end
 ```
 
-
 ### Exporting data
 
 The `Mobius.Exports` module provide functions for exporting the data in a couple
@@ -151,3 +150,11 @@ most useful for preparing metrics to send off to another system. To parse
 the binary format you can use `Mobius.Exports.parse_mbf/1`.
 
 For each of these you can see the `Mobius.Exports` module for more details.
+
+### Report metrics to a remote server
+
+Mobius allows sending metrics to a remote server. You can do this by passing the
+`:remote_reporter` option to Mobius. This is a module that implements the
+`Mobius.RemoteReporter` behaviour. Optionally, you can pass the
+`:remote_report_interval` option to specify how often to report metrics, by
+default this is every 1 minute.

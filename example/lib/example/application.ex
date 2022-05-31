@@ -22,7 +22,12 @@ defmodule Example.Application do
     children = [
       # Starts a worker by calling: Example.Worker.start_link(arg)
       # {Example.Worker, arg}
-      {Mobius, metrics: metrics, persistence_dir: "/tmp", database: database}
+      {Mobius,
+       metrics: metrics,
+       persistence_dir: "/tmp",
+       database: database,
+       remote_reporter: Mobius.RemoteReporters.LoggerReporter,
+       remote_report_interval: 10_000}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

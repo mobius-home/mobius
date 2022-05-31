@@ -5,7 +5,7 @@ defmodule Mobius do
 
   use Supervisor
 
-  alias Mobius.{MetricsTable, Scraper, Summary}
+  alias Mobius.{MetricsTable, RemoteReporter, Scraper, Summary}
 
   alias Telemetry.Metrics
 
@@ -29,6 +29,8 @@ defmodule Mobius do
           | {:metrics, [Metrics.t()]}
           | {:persistence_dir, binary()}
           | {:database, Mobius.RRD.t()}
+          | {:remote_reporter, RemoteReporter.t() | {RemoteReporter.t(), term()}}
+          | {:remote_report_interval, non_neg_integer()}
 
   @typedoc """
   The name of the Mobius instance
@@ -92,6 +94,7 @@ defmodule Mobius do
             {Mobius.Scraper, args}
           ]
           |> maybe_enable_autosave(args)
+          |> maybe_start_remote_reporter(args)
 
         Supervisor.init(children, strategy: :one_for_one)
 
@@ -126,6 +129,27 @@ defmodule Mobius do
     else
       children
     end
+  end
+
+  defp maybe_start_remote_reporter(children, args) do
+    case args[:remote_reporter] do
+      nil ->
+        children
+
+      _config ->
+        children ++ [{Mobius.RemoteReporterServer, make_remote_report_server_args(args)}]
+    end
+  end
+
+  defp make_remote_report_server_args(mobius_args) do
+    reporter = Keyword.fetch!(mobius_args, :remote_reporter)
+    report_interval = mobius_args[:remote_report_interval]
+
+    [
+      reporter: reporter,
+      report_interval: report_interval,
+      mobius_instance: mobius_args[:mobius_instance]
+    ]
   end
 
   @doc """
