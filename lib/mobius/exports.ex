@@ -15,7 +15,8 @@ defmodule Mobius.Exports do
   `mbf/1`.
   """
 
-  alias Mobius.Exports.{MobiusBinaryFormat, UnsupportedMetricError}
+  alias Mobius.Asciichart
+  alias Mobius.Exports.{CSV, Metrics, MobiusBinaryFormat, UnsupportedMetricError}
 
   @typedoc """
   Options to use when exporting time series metric data
@@ -45,6 +46,14 @@ defmodule Mobius.Exports do
           | {:headers, boolean()}
           | {:iodevice, IO.device()}
 
+  @typedoc """
+  Metric types that can be exported
+
+  By default you can try to export any `Mobius.metric_type()`, but for then
+  summary metric type you can specify which summary type you want to export.
+  """
+  @type export_metric_type() :: Mobius.metric_type() | {:summary, atom()}
+
   @doc """
   Generate a CSV for the metric
 
@@ -62,7 +71,7 @@ defmodule Mobius.Exports do
   :ok = Mobius.Exports.csv("vm.memory.total", :last_value, %{}, iodevice: file)
   ```
   """
-  @spec csv(binary(), Mobius.metric_type(), map(), [csv_export_opt()]) ::
+  @spec csv(binary(), export_metric_type(), map(), [csv_export_opt()]) ::
           :ok | {:ok, binary()} | {:error, UnsupportedMetricError.t()}
   def csv(metric_name, type, tags, opts \\ [])
 
@@ -71,29 +80,19 @@ defmodule Mobius.Exports do
   end
 
   def csv(metric_name, type, tags, opts) do
-    case get_metrics(metric_name, type, tags, opts) do
-      {:ok, metrics} ->
-        export_opts = build_exporter_opts(metric_name, type, tags, opts)
-        Mobius.Exports.CSV.export_metrics(metrics, export_opts)
-
-      error ->
-        error
-    end
+    metrics = get_metrics(metric_name, type, tags, opts)
+    export_opts = build_exporter_opts(metric_name, type, tags, opts)
+    CSV.export_metrics(metrics, export_opts)
   end
 
   @doc """
   Generates a series that contains the value of the metric
   """
-  @spec series(String.t(), Mobius.metric_type(), map(), [export_opt()]) ::
-          {:ok, [integer()]} | {:error, UnsupportedMetricError.t()}
+  @spec series(String.t(), export_metric_type(), map(), [export_opt()]) :: [integer()]
   def series(metric_name, type, tags, opts \\ []) do
-    case get_metrics(metric_name, type, tags, opts) do
-      {:ok, metrics} ->
-        {:ok, Enum.map(metrics, fn metric -> metric.value end)}
-
-      error ->
-        error
-    end
+    metric_name
+    |> get_metrics(type, tags, opts)
+    |> Enum.map(& &1.value)
   end
 
   @doc """
@@ -142,9 +141,9 @@ defmodule Mobius.Exports do
   ```
   """
   @spec metrics(Mobius.metric_name(), Mobius.metric_type(), map(), [export_opt()] | keyword()) ::
-          {:ok, [Mobius.metric()]} | {:error, UnsupportedMetricError.t()}
+          [Mobius.metric()]
   def metrics(metric_name, type, tags, opts \\ []) do
-    {:ok, Mobius.Exports.Metrics.export(metric_name, type, tags, opts)}
+    Metrics.export(metric_name, type, tags, opts)
   end
 
   defp get_metrics(metric_name, type, tags, opts) do
@@ -206,7 +205,8 @@ defmodule Mobius.Exports do
   Mobius.Exports.metrics("vm.memory.total", {:summary, :average}, %{}, last: {2, :hour})
   ```
   """
-  @spec plot(Mobius.metric_name(), Mobius.metric_type(), map(), [export_opt()]) :: :ok
+  @spec plot(Mobius.metric_name(), export_metric_type(), map(), [export_opt()]) ::
+          :ok | {:error, UnsupportedMetricError.t()}
   def plot(metric_name, type, tags \\ %{}, opts \\ [])
 
   def plot(_metric_name, :summary, _tags, _opts) do
@@ -214,25 +214,28 @@ defmodule Mobius.Exports do
   end
 
   def plot(metric_name, type, tags, opts) do
-    with {:ok, series} <- series(metric_name, type, tags, opts),
-         {:ok, plot} <- Mobius.Asciichart.plot(series, height: 12) do
-      chart = [
-        "\t\t",
-        IO.ANSI.yellow(),
-        "Metric Name: ",
-        metric_name,
-        IO.ANSI.reset(),
-        ", ",
-        IO.ANSI.cyan(),
-        "Tags: #{inspect(tags)}",
-        IO.ANSI.reset(),
-        "\n\n",
-        plot
-      ]
+    series = series(metric_name, type, tags, opts)
 
-      IO.puts(chart)
-    else
-      error -> error
+    case Asciichart.plot(series, height: 12) do
+      {:ok, plot} ->
+        chart = [
+          "\t\t",
+          IO.ANSI.yellow(),
+          "Metric Name: ",
+          metric_name,
+          IO.ANSI.reset(),
+          ", ",
+          IO.ANSI.cyan(),
+          "Tags: #{inspect(tags)}",
+          IO.ANSI.reset(),
+          "\n\n",
+          plot
+        ]
+
+        IO.puts(chart)
+
+      error ->
+        error
     end
   end
 

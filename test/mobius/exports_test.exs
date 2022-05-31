@@ -11,7 +11,10 @@ defmodule Mobius.ExportsTest do
       Telemetry.Metrics.last_value("make.another.value")
     ]
 
-    args = Keyword.put(make_args(tmp_dir), :metrics, metrics)
+    args =
+      tmp_dir
+      |> make_args()
+      |> Keyword.merge(metrics: metrics, mobius_instance: :export_mbf)
 
     {:ok, _} = start_supervised({Mobius, args})
     execute_telemetry([:make, :mbf], %{value: 100})
@@ -20,7 +23,7 @@ defmodule Mobius.ExportsTest do
     # make sure there's time for the scrapper
     Process.sleep(1_000)
 
-    mbf = Exports.mbf()
+    mbf = Exports.mbf(mobius_instance: :export_mbf)
 
     assert {:ok, metrics} = Exports.parse_mbf(mbf)
 

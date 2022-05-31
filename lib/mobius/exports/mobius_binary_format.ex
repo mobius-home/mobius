@@ -1,6 +1,8 @@
 defmodule Mobius.Exports.MobiusBinaryFormat do
   @moduledoc false
 
+  alias Mobius.Exports.MBFParseError
+
   @format_version 1
 
   @doc """
@@ -16,22 +18,20 @@ defmodule Mobius.Exports.MobiusBinaryFormat do
   """
   @spec parse(binary()) :: {:ok, [Mobius.metric()]} | {:error, Mobius.Exports.MBFParseError.t()}
   def parse(<<@format_version, metrics_bin::binary>>) do
-    try do
-      metrics = :erlang.binary_to_term(metrics_bin)
+    metrics = :erlang.binary_to_term(metrics_bin)
 
-      if validate_metrics(metrics) do
-        {:ok, metrics}
-      else
-        {:error, Mobius.Exports.MBFParseError.exception(:invalid_format)}
-      end
-    rescue
-      ArgumentError ->
-        {:error, Mobius.Exports.MBFParseError.exception(:corrupt)}
+    if validate_metrics(metrics) do
+      {:ok, metrics}
+    else
+      {:error, MBFParseError.exception(:invalid_format)}
     end
+  rescue
+    ArgumentError ->
+      {:error, MBFParseError.exception(:corrupt)}
   end
 
   def parse(_other) do
-    {:error, Mobius.Exports.MBFParseError.exception(:invalid_format)}
+    {:error, MBFParseError.exception(:invalid_format)}
   end
 
   defp validate_metrics(metrics) when is_list(metrics) do

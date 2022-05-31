@@ -1,8 +1,7 @@
 defmodule Mobius.Exports.MobiusBinaryFormatTest do
   use ExUnit.Case, async: true
 
-  alias Mobius.Exports.MobiusBinaryFormat
-  alias Mobius.Exports.MBFParseError
+  alias Mobius.Exports.{MBFParseError, MobiusBinaryFormat}
 
   test "parsing version 1 Mobius Binary Format" do
     metrics = [
