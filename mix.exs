@@ -56,7 +56,7 @@ defmodule Mobius.MixProject do
   defp package do
     [
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/mattludwigs/mobius"}
+      links: %{"GitHub" => "https://github.com/mobius-home/mobius"}
     ]
   end
 
