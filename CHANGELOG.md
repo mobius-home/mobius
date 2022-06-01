@@ -7,7 +7,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > Major version zero (0.y.z) is for initial development. Anything MAY change at
 any time. The public API SHOULD NOT be considered stable.
 
-## [v0.5.0] - 2022-05-32
+## [v0.5.1] - 2022-06-01
+
+### Added
+
+- Added the ability for a remote reporter to response with
+  `{:error, reason, new_state}`.
+
+## [v0.5.0] - 2022-05-31
 
 Breaking changes for three functions in the `Mobius.Exports` module:
 
