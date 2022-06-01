@@ -71,6 +71,9 @@ defmodule Mobius.RemoteReporterServer do
              next_query_from: to + 1,
              interval_ref: new_timer_ref
          }}
+
+      {:error, _reason, new_state} ->
+        {:noreply, %{state | reporter_state: new_state, interval_ref: new_timer_ref}}
     end
   end
 

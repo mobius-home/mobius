@@ -81,5 +81,5 @@ defmodule Mobius.RemoteReporter do
   only the newest metrics.
   """
   @callback handle_metrics([Mobius.metric()], state :: term()) ::
-              {:noreply, state :: term()}
+              {:noreply, state :: term()} | {:error, reason :: term(), state :: term()}
 end
