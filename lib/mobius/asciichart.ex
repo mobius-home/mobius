@@ -218,11 +218,11 @@ defmodule Mobius.Asciichart do
             |> Enum.max()
           end)
 
-        max_no_x_labels = div(width_x_axis, longest_x_label + 2)
+        max_no_x_labels = div(width_x_axis, longest_x_label + 2) + 1
 
         first_x_value = List.first(x_series)
         last_x_value = List.last(x_series)
-        tick_size = div(width_x_axis - max_no_x_labels, max_no_x_labels - 1)
+        tick_size = div(width_x_axis, max_no_x_labels - 1)
 
         ticks =
           Stream.repeatedly(fn -> "┬" end)
