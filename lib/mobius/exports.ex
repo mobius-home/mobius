@@ -216,7 +216,11 @@ defmodule Mobius.Exports do
   def plot(metric_name, type, tags, opts) do
     metrics = get_metrics(metric_name, type, tags, opts)
     y_series = Enum.map(metrics, & &1.value)
-    max_ts = metrics |> List.last(%{}) |> Map.get(:timestamp)
+
+    max_ts =
+      with %{timestamp: ts} <- List.last(metrics) do
+        ts
+      end
 
     granularity =
       case Keyword.get(opts, :last) do
