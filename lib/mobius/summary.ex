@@ -4,7 +4,16 @@ defmodule Mobius.Summary do
   @typedoc """
   Calculated summary statistics
   """
-  @type t() :: %{min: integer(), max: integer(), average: float(), std_dev: float()}
+  @type t() :: %{
+          min: integer(),
+          max: integer(),
+          average: float(),
+          std_dev: float(),
+          p50: float(),
+          p75: float(),
+          p95: float(),
+          p99: float()
+        }
 
   @typedoc """
   A data type to store snapshot information about a summary in order
@@ -15,7 +24,8 @@ defmodule Mobius.Summary do
           max: integer(),
           accumulated: integer(),
           accumulated_sqrd: integer(),
-          reports: non_neg_integer()
+          reports: non_neg_integer(),
+          t_digest: map()
         }
 
   @doc """
@@ -28,7 +38,8 @@ defmodule Mobius.Summary do
       max: metric_value,
       accumulated: metric_value,
       accumulated_sqrd: metric_value * metric_value,
-      reports: 1
+      reports: 1,
+      t_digest: TDigest.new() |> TDigest.update(metric_value)
     }
   end
 
@@ -42,7 +53,8 @@ defmodule Mobius.Summary do
       max: max(summary_data.max, new_metric_value),
       accumulated: summary_data.accumulated + new_metric_value,
       accumulated_sqrd: summary_data.accumulated_sqrd + new_metric_value * new_metric_value,
-      reports: summary_data.reports + 1
+      reports: summary_data.reports + 1,
+      t_digest: TDigest.update(summary_data.t_digest, new_metric_value)
     }
   end
 
@@ -56,7 +68,11 @@ defmodule Mobius.Summary do
       max: summary_data.max,
       average: summary_data.accumulated / summary_data.reports,
       std_dev:
-        std_dev(summary_data.accumulated, summary_data.accumulated_sqrd, summary_data.reports)
+        std_dev(summary_data.accumulated, summary_data.accumulated_sqrd, summary_data.reports),
+      p50: percentile(summary_data.t_digest, 0.5),
+      p75: percentile(summary_data.t_digest, 0.75),
+      p95: percentile(summary_data.t_digest, 0.95),
+      p99: percentile(summary_data.t_digest, 0.99)
     }
   end
 
@@ -67,4 +83,7 @@ defmodule Mobius.Summary do
     ((sum_sqrd - sum * sum / n) / (n - 1))
     |> :math.sqrt()
   end
+
+  # Approximate percentiles using t-digest
+  defdelegate percentile(t, p), to: TDigest
 end
