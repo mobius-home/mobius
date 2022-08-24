@@ -52,8 +52,10 @@ defmodule Mobius.RemoteReporter do
   end
   ```
 
-  If you are okay with the one minute reports you do not have to provide the
-  `:remote_report_interval` option.
+  If you do not supply a `:remote_report_interval` value the remote reporter
+  will not be ran. This is useful for programmatic on demand reporting. If you
+  want Mobius to  automatically report metrics at an interval you have to set
+  `:remote_report_interval` in the Mobius options.
   """
 
   @typedoc """
@@ -82,4 +84,12 @@ defmodule Mobius.RemoteReporter do
   """
   @callback handle_metrics([Mobius.metric()], state :: term()) ::
               {:noreply, state :: term()} | {:error, reason :: term(), state :: term()}
+
+  @doc """
+  Trigger metrics to be reported
+  """
+  @spec report_metrics(Mobius.instance()) :: :ok
+  def report_metrics(instance \\ :mobius) do
+    Mobius.RemoteReporterServer.report_metrics(instance)
+  end
 end

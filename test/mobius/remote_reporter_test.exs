@@ -33,4 +33,26 @@ defmodule Mobius.RemoteReporterTest do
 
     assert_receive :got_metrics, 8_000
   end
+
+  @tag timeout: 65_000
+  test "handle_metrics/2 is called via report_metrics/1 function" do
+    {:ok, _pid} =
+      start_supervised(
+        {Mobius,
+         persistence_dir: "/tmp",
+         mobius_instance: :reporter_test,
+         metrics: [],
+         remote_reporter: {TestRemoteReporter, receiver: self()}}
+      )
+
+    # ensure no messages are received automatically, we use 60 seconds here
+    # because older implementation defaults for 60 seconds when no interval is
+    # supplied
+    refute_receive :got_metrics, 60_000
+
+    :ok = Mobius.RemoteReporterServer.report_metrics(:reporter_test)
+
+    # should receive right away
+    assert_receive :got_metrics, 1_000
+  end
 end

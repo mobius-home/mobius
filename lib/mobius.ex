@@ -23,6 +23,12 @@ defmodule Mobius do
      persistence data (default disabled) metric information
   * `:database` - the `Mobius.RRD.t()` to use. This will default to the the default
      values found in `Mobius.RRD`
+  * `:remote_reporter` - module that implements the `Mobius.RemoteReporter`
+    behaviour
+  * `:remote_report_interval` - if you want Mobius to trigger sending metrics at
+    an interval you can provide an interval in milliseconds. If this is not
+    configured you can trigger a metric report by calling
+    `Mobius.RemoteReporter.report_metrics/1`.
   """
   @type arg() ::
           {:mobius_instance, instance()}

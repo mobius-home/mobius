@@ -9,6 +9,7 @@ defmodule Mobius.MixProject do
       version: @version,
       elixir: "~> 1.11",
       start_permanent: Mix.env() == :prod,
+      aliases: aliases(),
       deps: deps(),
       dialyzer: dialyzer(),
       description: description(),
@@ -64,6 +65,12 @@ defmodule Mobius.MixProject do
     [
       flags: [:unmatched_returns, :error_handling],
       plt_add_apps: [:eex, :mix]
+    ]
+  end
+
+  defp aliases() do
+    [
+      test: ["test --exclude timeout"]
     ]
   end
 end
