@@ -3,7 +3,7 @@ defmodule Mobius.RemoteReporter do
   Behaviour for modules that report mobius metrics to a remote server
 
   A remote reporter allows mobius to report metrics to a remote server at some
-  configured interval.
+  configured interval on demand.
 
   Say we have a remote reporter who needs an API token to communicate with a
   remote server. The implementation could look like:
@@ -90,6 +90,6 @@ defmodule Mobius.RemoteReporter do
   """
   @spec report_metrics(Mobius.instance()) :: :ok
   def report_metrics(instance \\ :mobius) do
-    Mobius.RemoteReporterServer.report_metrics(instance)
+    Mobius.ReportingServer.report_metrics(instance)
   end
 end

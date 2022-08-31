@@ -50,7 +50,7 @@ defmodule Mobius.RemoteReporterTest do
     # supplied
     refute_receive :got_metrics, 60_000
 
-    :ok = Mobius.RemoteReporterServer.report_metrics(:reporter_test)
+    :ok = Mobius.ReportingServer.report_metrics(:reporter_test)
 
     # should receive right away
     assert_receive :got_metrics, 1_000
