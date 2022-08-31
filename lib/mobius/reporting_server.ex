@@ -1,5 +1,7 @@
-defmodule Mobius.RemoteReporterServer do
+defmodule Mobius.ReportingServer do
   @moduledoc false
+
+  # Server for facilitating reporting metrics
 
   use GenServer
 
@@ -11,7 +13,7 @@ defmodule Mobius.RemoteReporterServer do
   Arguments to the client server
   """
   @type arg() ::
-          {:reporter, RemoteReporter.t() | {RemoteReporter.t(), term()}}
+          {:remote_reporter, RemoteReporter.t() | {RemoteReporter.t(), term()}}
           | {:report_interval, non_neg_integer()}
           | {:mobius_instance, Mobius.instance()}
 
@@ -33,7 +35,7 @@ defmodule Mobius.RemoteReporterServer do
   def init(args) do
     instance = args[:mobius_instance] || :mobius
     {reporter, reporter_args} = get_reporter(args)
-    {:ok, state} = reporter.init(reporter_args)
+    {:ok, state} = init_reporter(reporter, reporter_args)
     start_time = System.monotonic_time(:second)
     report_interval = args[:report_interval]
 
@@ -55,7 +57,21 @@ defmodule Mobius.RemoteReporterServer do
     case Keyword.fetch!(args, :reporter) do
       {reporter, _client_args} = return when is_atom(reporter) -> return
       reporter when is_atom(reporter) -> {reporter, []}
+      nil -> {nil, []}
     end
+  end
+
+  @doc """
+  Get the latest metrics
+
+  This is useful if you want to build reports out of band the remote reporter.
+  Keep in mind this does advanced the next metric query the time this function
+  was called. That means the next group of metrics will start at the next
+  record after the last one in this list
+  """
+  @spec get_latest_metrics(Mobius.instance()) :: [Mobius.metric()]
+  def get_latest_metrics(mobius_instance \\ :mobius) do
+    GenServer.call(name(mobius_instance), :get_latest_metrics)
   end
 
   @doc """
@@ -77,8 +93,24 @@ defmodule Mobius.RemoteReporterServer do
   end
 
   @impl GenServer
+  def handle_call(:get_latest_metrics, _from, state) do
+    {from, to} = get_query_window(state)
+    records = Scraper.all(state.mobius, from: from, to: to)
+
+    {:reply, records, %{state | next_query_from: to + 1}}
+  end
+
+  @impl GenServer
   def handle_info(:report, state) do
     {:noreply, run_report(state)}
+  end
+
+  defp run_report(%{reporter: nil} = state) do
+    Logger.warn(
+      "[Mobius]: tried to report metrics to a remote location but there is no reporter module. Check your configuration."
+    )
+
+    {:noreply, state}
   end
 
   defp run_report(state) do
@@ -133,7 +165,7 @@ defmodule Mobius.RemoteReporterServer do
   end
 
   defp maybe_start_interval(state) do
-    if state.report_interval do
+    if state.report_interval && has_remote_reporter(state.reporter) do
       timer_ref = Process.send_after(self(), :report, state.report_interval)
 
       Map.put(state, :interval_ref, timer_ref)
@@ -141,4 +173,10 @@ defmodule Mobius.RemoteReporterServer do
       state
     end
   end
+
+  defp has_remote_reporter(nil), do: false
+  defp has_remote_reporter(reporter) when is_atom(reporter), do: true
+
+  defp init_reporter(nil, _args), do: {:ok, nil}
+  defp init_reporter(reporter, args) when is_atom(reporter), do: reporter.init(args)
 end

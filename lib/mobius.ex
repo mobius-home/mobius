@@ -5,7 +5,7 @@ defmodule Mobius do
 
   use Supervisor
 
-  alias Mobius.{MetricsTable, RemoteReporter, Scraper, Summary}
+  alias Mobius.{MetricsTable, RemoteReporter, ReportingServer, Scraper, Summary}
 
   alias Telemetry.Metrics
 
@@ -24,7 +24,7 @@ defmodule Mobius do
   * `:database` - the `Mobius.RRD.t()` to use. This will default to the the default
      values found in `Mobius.RRD`
   * `:remote_reporter` - module that implements the `Mobius.RemoteReporter`
-    behaviour
+    behaviour. If this not configured triggering a report will not work.
   * `:remote_report_interval` - if you want Mobius to trigger sending metrics at
     an interval you can provide an interval in milliseconds. If this is not
     configured you can trigger a metric report by calling
@@ -101,10 +101,10 @@ defmodule Mobius do
           [
             {Mobius.MetricsTable.Monitor, args},
             {Mobius.Registry, args},
-            {Mobius.Scraper, args}
+            {Mobius.Scraper, args},
+            {ReportingServer, make_reporting_server_args(args)}
           ]
           |> maybe_enable_autosave(args)
-          |> maybe_start_remote_reporter(args)
 
         Supervisor.init(children, strategy: :one_for_one)
 
@@ -141,18 +141,8 @@ defmodule Mobius do
     end
   end
 
-  defp maybe_start_remote_reporter(children, args) do
-    case args[:remote_reporter] do
-      nil ->
-        children
-
-      _config ->
-        children ++ [{Mobius.RemoteReporterServer, make_remote_report_server_args(args)}]
-    end
-  end
-
-  defp make_remote_report_server_args(mobius_args) do
-    reporter = Keyword.fetch!(mobius_args, :remote_reporter)
+  defp make_reporting_server_args(mobius_args) do
+    reporter = Keyword.get(mobius_args, :remote_reporter)
     report_interval = mobius_args[:remote_report_interval]
 
     [
@@ -234,5 +224,18 @@ defmodule Mobius do
 
         error
     end
+  end
+
+  @doc """
+  Get the latest metrics
+
+  This will query Mobius to get the metrics from the last time metrics were
+  queried. This function is useful for when you want other software to control
+  how reports are built, but you don't need to have the reports built and sent
+  at an interval.
+  """
+  @spec get_latest_metrics(Mobius.instance()) :: [metric()]
+  def get_latest_metrics(mobius_instance \\ :mobius) do
+    ReportingServer.get_latest_metrics(mobius_instance)
   end
 end
