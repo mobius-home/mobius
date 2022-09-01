@@ -5,13 +5,39 @@ defmodule Mobius do
 
   use Supervisor
 
-  alias Mobius.{MetricsTable, RemoteReporter, ReportingServer, Scraper, Summary}
+  alias Mobius.{EventLog, MetricsTable, RemoteReporter, ReportingServer, Scraper, Summary}
 
   alias Telemetry.Metrics
 
   @default_args [mobius_instance: :mobius, persistence_dir: "/data", autosave_interval: nil]
 
   @type time_unit() :: :second | :minute | :hour | :day
+
+  @typedoc """
+  A function to process an event's measurements
+
+  This will be called on each measurement and will receive a tuple where the
+  first element is the name of the measurement and the second element is the
+  value. This function can process the value and return a new one.
+  """
+  @type event_measurement_values() :: ({atom(), term()} -> term())
+
+  @typedoc """
+  Options you can pass an event
+
+  These options only apply to the `:event` argument to Mobius. If you want
+  to track metrics please see the `:metrics` argument to Mobius.
+
+  * `:tags` - list of tag names to save with the event
+  * `:measurement_values` - a function that will receive each measurement that
+    allows for data processing before storing the event in the event log
+  * `:group` - an atom that defines the event group, this will allow for filtering
+    on particular types of events for example: `:network`. Default is `:default`
+  """
+  @type event_opt() ::
+          {:measurement_values, event_measurement_values()} | {:tags, [atom()]} | {:group, atom()}
+
+  @type event_def() :: [binary() | {binary(), keyword()}]
 
   @typedoc """
   Arguments to Mobius
@@ -29,6 +55,8 @@ defmodule Mobius do
     an interval you can provide an interval in milliseconds. If this is not
     configured you can trigger a metric report by calling
     `Mobius.RemoteReporter.report_metrics/1`.
+  * `:events` - a list of events for mobius to store in the event log
+  * `:event_log_size` - number of events to store (defaults to 1000)
   """
   @type arg() ::
           {:mobius_instance, instance()}
@@ -37,6 +65,8 @@ defmodule Mobius do
           | {:database, Mobius.RRD.t()}
           | {:remote_reporter, RemoteReporter.t() | {RemoteReporter.t(), term()}}
           | {:remote_report_interval, non_neg_integer()}
+          | {:events, [event_def()]}
+          | {:event_log_size, integer()}
 
   @typedoc """
   The name of the Mobius instance
@@ -100,6 +130,7 @@ defmodule Mobius do
         children =
           [
             {Mobius.MetricsTable.Monitor, args},
+            {Mobius.EventsServer, args},
             {Mobius.Registry, args},
             {Mobius.Scraper, args},
             {ReportingServer, make_reporting_server_args(args)}
@@ -207,7 +238,8 @@ defmodule Mobius do
     })
 
     with :ok <- Scraper.save(instance),
-         :ok <- MetricsTable.Monitor.save(instance) do
+         :ok <- MetricsTable.Monitor.save(instance),
+         :ok <- EventLog.save(instance) do
       duration = System.monotonic_time() - start_t
       :telemetry.execute(prefix ++ [:stop], %{duration: duration}, %{instance: instance})
 
