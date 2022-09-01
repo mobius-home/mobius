@@ -34,7 +34,8 @@ defmodule Mobius.MixProject do
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
       {:telemetry, "~> 0.4.3 or ~> 1.0"},
       {:telemetry_metrics, "~> 0.6.0"},
-      {:circular_buffer, "~> 0.4.0"}
+      {:circular_buffer, "~> 0.4.0"},
+      {:t_digest, "~> 0.1.1"}
     ]
   end
 
