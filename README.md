@@ -107,7 +107,7 @@ This can be automated by passing `autosave_interval` to Mobius
 ```elixir
 def start(_type, _args) do
   metrics = [
-    Metrics.last_value("my.telemetry.event"),
+    Metrics.last_value("my.telemetry.event.measurement"),
   ]
 
   children = [
@@ -158,3 +158,74 @@ Mobius allows sending metrics to a remote server. You can do this by passing the
 `Mobius.RemoteReporter` behaviour. Optionally, you can pass the
 `:remote_report_interval` option to specify how often to report metrics, by
 default this is every 1 minute.
+
+### Events
+
+In a system we want to track metrics and events. Metrics are measurements
+tracked at a regular interval. These could in cloud CPU and memory usage or
+something like bytes transmitted over an LTE connection. Events are things
+tracked at irregular intervals that might not have a measurement. Events are
+necessary to pin point moments in time that something of interest happens that
+isn't necessarily a measurement. For example, firmware updates and interface
+connections.
+
+Events are good to track things that happen at particular time that are enriched
+by extra data, whereas metrics are good for understand single piece of data over
+time.
+
+You can listen for raw telemetry events by passing a list of event names to
+Mobius.
+
+```elixir
+def start(_type, _args) do
+  events = [
+    "a.button.was.pressed"
+  ]
+
+  children = [
+    # ... other children ....
+    {Mobius, events: events, autosave_interval: 60} # auto save every 60 seconds
+    # ... other children ....
+  ]
+
+  opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+  Supervisor.start_link(children, opts)
+end
+```
+
+The above example will listen for that telemetry event and save that into
+Mobius's event log.
+
+Event configurations can take different options:
+
+* `:tags` - list of tag names to save with the event
+* `:measurement_values` - a function that will receive each measurement that
+  allows for data processing before storing the event in the event log
+* `:group` - an atom that defines the event group, this will allow for filtering
+  on particular types of events for example: `:network`. Default is `:default`
+
+For example if a measurement is reported in naive time and you want to convert
+that to seconds you can do that this way:
+
+```elixir
+def start(_type, _args) do
+  events = [
+    {"a.button.was.pressed", measurement_values: &process_button_measurements/1}
+  ]
+
+  children = [
+    # ... other children ....
+    {Mobius, events: events, autosave_interval: 60} # auto save every 60 seconds
+    # ... other children ....
+  ]
+
+  opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+  Supervisor.start_link(children, opts)
+end
+
+defp process_button_measurement({:system_time, sys_time}) do
+  System.convert_time(sys_time, :naive, :second)
+end
+
+defp process_button_measurement({_, value}), do: value
+```

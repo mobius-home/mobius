@@ -22,6 +22,8 @@ defmodule Mobius.Registry do
   def start_link(args) do
     ensure_metrics(args)
 
+    args = Keyword.put_new(args, :events, [])
+
     GenServer.start_link(__MODULE__, args, name: name(args[:mobius_instance]))
   end
 
@@ -44,6 +46,7 @@ defmodule Mobius.Registry do
   @impl GenServer
   def init(args) do
     registered = register_metrics(args)
+    _ = register_events(args)
 
     {:ok,
      %{
@@ -55,16 +58,43 @@ defmodule Mobius.Registry do
 
   defp register_metrics(args) do
     for {event, metrics} <- Enum.group_by(args[:metrics], & &1.event_name) do
-      id = {__MODULE__, event, self()}
+      name = [:metric | event]
+      id = {__MODULE__, name, self()}
 
       _ =
-        :telemetry.attach(id, event, &Mobius.Events.handle/4, %{
+        :telemetry.attach(id, event, &Mobius.Events.handle_metrics/4, %{
           table: args[:mobius_instance],
           metrics: metrics
         })
 
       id
     end
+  end
+
+  defp register_events(args) do
+    events = args[:events] || []
+
+    for event <- events do
+      {event, event_opts} = get_event_and_opts(event)
+      id = {__MODULE__, event, self()}
+
+      _ =
+        :telemetry.attach(id, event, &Mobius.Events.handle_event/4, %{
+          table: args[:mobius_instance],
+          event_opts: event_opts
+        })
+
+      id
+    end
+  end
+
+  defp get_event_and_opts({event, opts}), do: {parse_event_name(event), opts}
+  defp get_event_and_opts(event), do: {parse_event_name(event), []}
+
+  defp parse_event_name(event) do
+    event
+    |> String.split(".", trim: true)
+    |> Enum.map(&String.to_atom/1)
   end
 
   @impl GenServer

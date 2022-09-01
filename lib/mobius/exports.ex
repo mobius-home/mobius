@@ -199,7 +199,7 @@ defmodule Mobius.Exports do
   ```
 
   Retrieving summary data can be performed by specifying type of the form:
-    {:summary, :summary_metric}
+    `{:summary, :summary_metric}`
 
   ```elixir
   Mobius.Exports.metrics("vm.memory.total", {:summary, :average}, %{}, last: {2, :hour})
