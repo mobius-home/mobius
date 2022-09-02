@@ -7,7 +7,7 @@ defmodule Mobius.EventLogTest do
     gen_events =
       for event_name <- ["a.b.c", "one.two.three", "x.y.z"] do
         ts = System.system_time(:second)
-        Event.new(event_name, ts - Enum.random(1..30), %{a: 1}, %{test: true})
+        Event.new("test", event_name, ts - Enum.random(1..30), %{a: 1}, %{test: true})
       end
 
     load_event_log(:list_all, gen_events)
@@ -23,8 +23,8 @@ defmodule Mobius.EventLogTest do
 
   test "to binary works (version 1)" do
     events = [
-      Event.new("a.b.c", 123_123, %{a: 1}, %{}),
-      Event.new("d.e.f", 123_124, %{a: 1}, %{})
+      Event.new("test", "a.b.c", 123_123, %{a: 1}, %{}),
+      Event.new("test", "d.e.f", 123_124, %{a: 1}, %{})
     ]
 
     load_event_log(:to_binary_works, events)
@@ -38,8 +38,8 @@ defmodule Mobius.EventLogTest do
 
   test "parses version 1" do
     events = [
-      Event.new("a.b.c", 123_123, %{a: 1}, %{}),
-      Event.new("d.e.f", 123_124, %{a: 1}, %{})
+      Event.new("test", "a.b.c", 123_123, %{a: 1}, %{}),
+      Event.new("test", "d.e.f", 123_124, %{a: 1}, %{})
     ]
 
     bin = <<0x01, :erlang.term_to_binary(events)::binary>>
@@ -51,7 +51,7 @@ defmodule Mobius.EventLogTest do
 
   defp load_event_log(log_name, events) do
     start_supervised!(
-      {EventsServer, mobius_instance: log_name, persistence_dir: "/tmp/mobius_event_log_test"}
+      {Mobius, mobius_instance: log_name, persistence_dir: "/tmp/mobius_event_log_test"}
     )
 
     Enum.each(events, fn event -> EventsServer.insert(log_name, event) end)

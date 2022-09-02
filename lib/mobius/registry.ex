@@ -20,19 +20,16 @@ defmodule Mobius.Registry do
   """
   @spec start_link([arg()]) :: GenServer.on_start()
   def start_link(args) do
-    ensure_metrics(args)
-
-    args = Keyword.put_new(args, :events, [])
+    args =
+      args
+      |> Keyword.put_new(:events, [])
+      |> Keyword.put_new(:metrics, [])
 
     GenServer.start_link(__MODULE__, args, name: name(args[:mobius_instance]))
   end
 
   defp name(instance) do
     Module.concat(__MODULE__, instance)
-  end
-
-  defp ensure_metrics(args) do
-    Keyword.get(args, :metrics) || raise "No :metrics defined in arguments to Mobius"
   end
 
   @doc """
@@ -81,7 +78,8 @@ defmodule Mobius.Registry do
       _ =
         :telemetry.attach(id, event, &Mobius.Events.handle_event/4, %{
           table: args[:mobius_instance],
-          event_opts: event_opts
+          event_opts: event_opts,
+          session: args[:session]
         })
 
       id
