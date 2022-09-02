@@ -5,7 +5,7 @@ defmodule Mobius.EventsServer do
 
   require Logger
 
-  alias Mobius.{Event, EventLog}
+  alias Mobius.{Event, EventLog, TimeServer}
 
   @file_name "event_log"
 
@@ -56,12 +56,21 @@ defmodule Mobius.EventsServer do
 
   @impl GenServer
   def init(args) do
+    :ok = TimeServer.register(args[:mobius_instance], self())
     persistence_dir = args[:persistence_dir]
     event_log_size = args[:event_log_size] || 1000
 
     cb = make_buffer(persistence_dir, event_log_size)
+    out_of_time_buffer = make_out_of_time_buffer(args[:mobius_instance])
 
-    {:ok, %{buffer: cb, persistence_dir: persistence_dir, size: event_log_size}}
+    {:ok,
+     %{
+       buffer: cb,
+       persistence_dir: persistence_dir,
+       size: event_log_size,
+       out_of_time_buffer: out_of_time_buffer,
+       instance: args[:mobius_instance]
+     }}
   end
 
   defp make_buffer(persistence_dir, log_size) do
@@ -80,6 +89,14 @@ defmodule Mobius.EventsServer do
     end
   end
 
+  defp make_out_of_time_buffer(instance) do
+    if TimeServer.synchronized?(instance) do
+      nil
+    else
+      CircularBuffer.new(100)
+    end
+  end
+
   @impl GenServer
   def handle_call(:list, _from, state) do
     {:reply, make_list(state.buffer), state}
@@ -87,9 +104,14 @@ defmodule Mobius.EventsServer do
 
   @impl GenServer
   def handle_cast({:insert_event, event}, state) do
-    new_buffer = CircularBuffer.insert(state.buffer, event)
+    if TimeServer.synchronized?(state.instance) do
+      new_buffer = CircularBuffer.insert(state.buffer, event)
 
-    {:noreply, %{state | buffer: new_buffer}}
+      {:noreply, %{state | buffer: new_buffer}}
+    else
+      out_of_time_buffer = CircularBuffer.insert(state.out_of_time_buffer, event)
+      {:noreply, %{state | out_of_time_buffer: out_of_time_buffer}}
+    end
   end
 
   def handle_cast({:save, binary}, state) do
@@ -111,6 +133,42 @@ defmodule Mobius.EventsServer do
     _ = File.rm(path)
 
     {:noreply, %{state | buffer: CircularBuffer.new(state.size)}}
+  end
+
+  @impl GenServer
+  def handle_info({Mobius.TimeServer, _, _}, %{out_of_time_buffer: nil} = state) do
+    {:noreply, state}
+  end
+
+  def handle_info({Mobius.TimeServer, sync_timestamp, adjustment}, state) do
+    out_of_time_events = CircularBuffer.to_list(state.out_of_time_buffer)
+    updated = adjust_timestamps(out_of_time_events, sync_timestamp, adjustment)
+
+    updated_buffer = insert_many(updated, state)
+
+    {:noreply, %{state | out_of_time_buffer: nil, buffer: updated_buffer}}
+  end
+
+  defp adjust_timestamps(events, sync_timestamp, adjustment) do
+    adjustment_sec = System.convert_time_unit(adjustment, :native, :second)
+    sync_timestamp_sec = System.convert_time_unit(sync_timestamp, :native, :second)
+
+    Enum.map(events, fn event ->
+      # this accounts for a race condition between an event being inserted after
+      # sync and before being notified that the clock synced
+      if sync_timestamp_sec < event.timestamp do
+        event
+      else
+        updated_ts = event.timestamp + adjustment_sec
+        Event.set_timestamp(event, updated_ts)
+      end
+    end)
+  end
+
+  defp insert_many(events, state) do
+    Enum.reduce(events, state.buffer, fn event, buffer ->
+      CircularBuffer.insert(buffer, event)
+    end)
   end
 
   defp make_list(buffer) do

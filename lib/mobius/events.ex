@@ -107,7 +107,14 @@ defmodule Mobius.Events do
         ) :: :ok
   def handle_event(event, measurements, metadata, config) do
     try do
-      process_event(config.table, event, measurements, metadata, config.event_opts)
+      process_event(
+        config.table,
+        config.session,
+        event,
+        measurements,
+        metadata,
+        config.event_opts
+      )
     rescue
       e ->
         Logger.error("Could not process event #{inspect(event)}")
@@ -117,12 +124,11 @@ defmodule Mobius.Events do
     :ok
   end
 
-  def process_event(instance, event, measurements, metadata, opts) do
+  def process_event(instance, session, event, measurements, metadata, opts) do
     measurements = process_measurements(measurements, opts)
-    ts = System.system_time(:second)
     tags = get_event_tags(metadata, opts)
 
-    event = Mobius.Event.new(event, ts, measurements, tags)
+    event = Mobius.Event.new(session, event, measurements, tags)
 
     Mobius.EventsServer.insert(instance, event)
     :ok

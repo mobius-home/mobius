@@ -57,6 +57,17 @@ defmodule Mobius do
     `Mobius.RemoteReporter.report_metrics/1`.
   * `:events` - a list of events for mobius to store in the event log
   * `:event_log_size` - number of events to store (defaults to 1000)
+  * `:clock` - module that implements the `Mobius.Clock` behaviour
+  * `:session` - a unique id to distinguish between different ties Mobius has ran
+
+  Mobius sessions allow you collect events to analyze across different different
+  times mobius ran. A good example of this might measuring how fast an interface
+  makes its first connection. You can build averages over run times and measure
+  connection performance. This will allow you to know on average how fast a
+  device connects and can check for increased or decreased performance between
+  runs.
+
+  By default Mobius will generate an UUID for each run.
   """
   @type arg() ::
           {:mobius_instance, instance()}
@@ -67,6 +78,8 @@ defmodule Mobius do
           | {:remote_report_interval, non_neg_integer()}
           | {:events, [event_def()]}
           | {:event_log_size, integer()}
+          | {:clock, module()}
+          | {:session, session()}
 
   @typedoc """
   The name of the Mobius instance
@@ -76,6 +89,8 @@ defmodule Mobius do
   @type instance() :: atom()
 
   @type metric_type() :: :counter | :last_value | :sum | :summary
+
+  @type session() :: binary()
 
   @typedoc """
   The name of the metric
@@ -117,6 +132,7 @@ defmodule Mobius do
   @impl Supervisor
   def init(args) do
     mobius_persistence_path = Path.join(args[:persistence_dir], to_string(args[:mobius_instance]))
+    args = Keyword.put_new(args, :session, UUID.uuid4())
 
     case ensure_mobius_persistence_dir(mobius_persistence_path) do
       :ok ->
@@ -129,6 +145,7 @@ defmodule Mobius do
 
         children =
           [
+            {Mobius.TimeServer, args},
             {Mobius.MetricsTable.Monitor, args},
             {Mobius.EventsServer, args},
             {Mobius.Registry, args},

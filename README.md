@@ -229,3 +229,24 @@ end
 
 defp process_button_measurement({_, value}), do: value
 ```
+
+### Clocks
+
+For systems that lack battery-backed real-time clock which will advance the
+clock at startup to a reasonable guess, the early events will have a timestamp
+that do not make much sense. Mobius allows you to pass the `clock` argument
+which is a module that implements the `Mobius.Clock` behaviour. This behavior
+has one callback: `synchronized?/0` which returns a boolean.
+
+If a clock implementation is provide, Mobius will wait for the clock to
+synchronize before including any events into the logs. Once the clock is
+synchronized Mobius will make a best effort attempt to adjust early event
+timestamps to reflect the actual time the event occurred and will then include
+the events into the event log.
+
+If no clock implementation is provided, Mobius will assume the clock is
+synchronized and that it can trust the provided timestamps of early events.
+
+For Nerves devices, the NervesTime package can be used:
+
+`{Mobius, metrics: my_metrics, events: my_events, clock: NervesTime}`

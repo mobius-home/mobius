@@ -41,13 +41,13 @@ defmodule Mobius.EventsTest do
   describe "event handling" do
     test "basic event" do
       start_supervised!(
-        {Mobius.EventsServer,
-         mobius_instance: :basic_event, persistence_dir: "/tmp/mobius_event_log"}
+        {Mobius, mobius_instance: :basic_event, persistence_dir: "/tmp/mobius_event_log"}
       )
 
       config = %{
         table: :basic_event,
-        event_opts: []
+        event_opts: [],
+        session: "test"
       }
 
       :ok = Events.handle_event("a.b.c", %{a: 1}, %{t: 1}, config)
@@ -61,13 +61,13 @@ defmodule Mobius.EventsTest do
 
     test "filter for tags" do
       start_supervised!(
-        {Mobius.EventsServer,
-         mobius_instance: :filter_for_tags, persistence_dir: "/tmp/mobius_event_log"}
+        {Mobius, mobius_instance: :filter_for_tags, persistence_dir: "/tmp/mobius_event_log"}
       )
 
       config = %{
         table: :filter_for_tags,
-        event_opts: [tags: [:t]]
+        event_opts: [tags: [:t]],
+        session: "test"
       }
 
       :ok = Events.handle_event("a.b.c", %{a: 1}, %{t: 1, z: 2}, config)
@@ -81,13 +81,13 @@ defmodule Mobius.EventsTest do
 
     test "process measurements" do
       start_supervised!(
-        {Mobius.EventsServer,
-         mobius_instance: :process_measurements, persistence_dir: "/tmp/mobius_event_log"}
+        {Mobius, mobius_instance: :process_measurements, persistence_dir: "/tmp/mobius_event_log"}
       )
 
       config = %{
         table: :process_measurements,
-        event_opts: [tags: [:t], measurements_values: &event_measurement_processor/1]
+        event_opts: [tags: [:t], measurements_values: &event_measurement_processor/1],
+        session: "test"
       }
 
       :ok = Events.handle_event("a.b.c", %{a: 1, b: 1}, %{t: 1, z: 2}, config)
