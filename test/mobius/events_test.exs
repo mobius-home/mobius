@@ -39,10 +39,9 @@ defmodule Mobius.EventsTest do
   end
 
   describe "event handling" do
-    test "basic event" do
-      start_supervised!(
-        {Mobius, mobius_instance: :basic_event, persistence_dir: "/tmp/mobius_event_log"}
-      )
+    @tag :tmp_dir
+    test "basic event", %{tmp_dir: tmp_dir} do
+      start_supervised!({Mobius, mobius_instance: :basic_event, persistence_dir: tmp_dir})
 
       config = %{
         table: :basic_event,
@@ -59,10 +58,9 @@ defmodule Mobius.EventsTest do
       assert event.tags == %{}
     end
 
-    test "filter for tags" do
-      start_supervised!(
-        {Mobius, mobius_instance: :filter_for_tags, persistence_dir: "/tmp/mobius_event_log"}
-      )
+    @tag :tmp_dir
+    test "filter for tags", %{tmp_dir: tmp_dir} do
+      start_supervised!({Mobius, mobius_instance: :filter_for_tags, persistence_dir: tmp_dir})
 
       config = %{
         table: :filter_for_tags,
@@ -79,9 +77,10 @@ defmodule Mobius.EventsTest do
       assert event.tags == %{t: 1}
     end
 
-    test "process measurements" do
+    @tag :tmp_dir
+    test "process measurements", %{tmp_dir: tmp_dir} do
       start_supervised!(
-        {Mobius, mobius_instance: :process_measurements, persistence_dir: "/tmp/mobius_event_log"}
+        {Mobius, mobius_instance: :process_measurements, persistence_dir: tmp_dir}
       )
 
       config = %{
