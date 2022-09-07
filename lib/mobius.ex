@@ -256,7 +256,7 @@ defmodule Mobius do
 
     with :ok <- Scraper.save(instance),
          :ok <- MetricsTable.Monitor.save(instance),
-         :ok <- EventLog.save(instance) do
+         :ok <- EventLog.save(instance: instance) do
       duration = System.monotonic_time() - start_t
       :telemetry.execute(prefix ++ [:stop], %{duration: duration}, %{instance: instance})
 

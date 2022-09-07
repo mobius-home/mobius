@@ -52,7 +52,7 @@ defmodule Mobius.EventsTest do
 
       :ok = Events.handle_event("a.b.c", %{a: 1}, %{t: 1}, config)
 
-      assert [event] = Mobius.EventLog.list(:basic_event)
+      assert [event] = Mobius.EventLog.list(instance: :basic_event)
 
       assert event.name == "a.b.c"
       assert event.measurements == %{a: 1}
@@ -72,7 +72,7 @@ defmodule Mobius.EventsTest do
 
       :ok = Events.handle_event("a.b.c", %{a: 1}, %{t: 1, z: 2}, config)
 
-      assert [event] = Mobius.EventLog.list(:filter_for_tags)
+      assert [event] = Mobius.EventLog.list(instance: :filter_for_tags)
 
       assert event.name == "a.b.c"
       assert event.measurements == %{a: 1}
@@ -92,7 +92,7 @@ defmodule Mobius.EventsTest do
 
       :ok = Events.handle_event("a.b.c", %{a: 1, b: 1}, %{t: 1, z: 2}, config)
 
-      assert [event] = Mobius.EventLog.list(:process_measurements)
+      assert [event] = Mobius.EventLog.list(instance: :process_measurements)
 
       assert event.name == "a.b.c"
       assert event.measurements == %{a: 2, b: 1}
