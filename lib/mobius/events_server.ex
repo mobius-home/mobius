@@ -58,7 +58,7 @@ defmodule Mobius.EventsServer do
   def init(args) do
     :ok = TimeServer.register(args[:mobius_instance], self())
     persistence_dir = args[:persistence_dir]
-    event_log_size = args[:event_log_size] || 1000
+    event_log_size = args[:event_log_size] || 500
 
     cb = make_buffer(persistence_dir, event_log_size)
     out_of_time_buffer = make_out_of_time_buffer(args[:mobius_instance])

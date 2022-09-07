@@ -56,7 +56,7 @@ defmodule Mobius do
     configured you can trigger a metric report by calling
     `Mobius.RemoteReporter.report_metrics/1`.
   * `:events` - a list of events for mobius to store in the event log
-  * `:event_log_size` - number of events to store (defaults to 1000)
+  * `:event_log_size` - number of events to store (defaults to 500)
   * `:clock` - module that implements the `Mobius.Clock` behaviour
   * `:session` - a unique id to distinguish between different ties Mobius has ran
 
