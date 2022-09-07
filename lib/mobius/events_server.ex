@@ -56,6 +56,7 @@ defmodule Mobius.EventsServer do
 
   @impl GenServer
   def init(args) do
+    Process.flag(:trap_exit, true)
     :ok = TimeServer.register(args[:mobius_instance], self())
     persistence_dir = args[:persistence_dir]
     event_log_size = args[:event_log_size] || 500
@@ -115,16 +116,9 @@ defmodule Mobius.EventsServer do
   end
 
   def handle_cast({:save, binary}, state) do
-    path = make_file_path(state.persistence_dir)
+    :ok = do_save(binary, state)
 
-    case File.write(path, binary) do
-      :ok ->
-        {:noreply, state}
-
-      {:error, reason} ->
-        Logger.warn("[Mobius]: unable to save event log: #{inspect(reason)}")
-        {:noreply, state}
-    end
+    {:noreply, state}
   end
 
   def handle_cast(:reset, state) do
@@ -171,6 +165,14 @@ defmodule Mobius.EventsServer do
     end)
   end
 
+  @impl GenServer
+  def terminate(_reason, state) do
+    events = make_list(state.buffer, [])
+    bin = EventLog.events_to_binary(events)
+
+    do_save(bin, state)
+  end
+
   defp make_list(buffer, opts) do
     from = opts[:from] || 0
     to = opts[:to] || System.system_time(:second)
@@ -185,5 +187,20 @@ defmodule Mobius.EventsServer do
 
   defp make_file_path(dir) do
     Path.join(dir, @file_name)
+  end
+
+  defp do_save(binary, state) do
+    path = make_file_path(state.persistence_dir)
+
+    _ =
+      case File.write(path, binary) do
+        :ok ->
+          state
+
+        {:error, reason} ->
+          Logger.warn("[Mobius]: unable to save event log: #{inspect(reason)}")
+      end
+
+    :ok
   end
 end
