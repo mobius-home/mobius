@@ -5,7 +5,7 @@ defmodule Mobius do
 
   use Supervisor
 
-  alias Mobius.{EventLog, MetricsTable, RemoteReporter, ReportingServer, Scraper, Summary}
+  alias Mobius.{Event, EventLog, MetricsTable, ReportServer, Scraper, Summary}
 
   alias Telemetry.Metrics
 
@@ -49,12 +49,6 @@ defmodule Mobius do
      persistence data (default disabled) metric information
   * `:database` - the `Mobius.RRD.t()` to use. This will default to the the default
      values found in `Mobius.RRD`
-  * `:remote_reporter` - module that implements the `Mobius.RemoteReporter`
-    behaviour. If this not configured triggering a report will not work.
-  * `:remote_report_interval` - if you want Mobius to trigger sending metrics at
-    an interval you can provide an interval in milliseconds. If this is not
-    configured you can trigger a metric report by calling
-    `Mobius.RemoteReporter.report_metrics/1`.
   * `:events` - a list of events for mobius to store in the event log
   * `:event_log_size` - number of events to store (defaults to 500)
   * `:clock` - module that implements the `Mobius.Clock` behaviour
@@ -74,8 +68,6 @@ defmodule Mobius do
           | {:metrics, [Metrics.t()]}
           | {:persistence_dir, binary()}
           | {:database, Mobius.RRD.t()}
-          | {:remote_reporter, RemoteReporter.t() | {RemoteReporter.t(), term()}}
-          | {:remote_report_interval, non_neg_integer()}
           | {:events, [event_def()]}
           | {:event_log_size, integer()}
           | {:clock, module()}
@@ -150,7 +142,7 @@ defmodule Mobius do
             {Mobius.EventsServer, args},
             {Mobius.Registry, args},
             {Mobius.Scraper, args},
-            {ReportingServer, make_reporting_server_args(args)}
+            {Mobius.ReportServer, args}
           ]
           |> maybe_enable_autosave(args)
 
@@ -187,17 +179,6 @@ defmodule Mobius do
     else
       children
     end
-  end
-
-  defp make_reporting_server_args(mobius_args) do
-    reporter = Keyword.get(mobius_args, :remote_reporter)
-    report_interval = mobius_args[:remote_report_interval]
-
-    [
-      reporter: reporter,
-      report_interval: report_interval,
-      mobius_instance: mobius_args[:mobius_instance]
-    ]
   end
 
   @doc """
@@ -278,13 +259,22 @@ defmodule Mobius do
   @doc """
   Get the latest metrics
 
-  This will query Mobius to get the metrics from the last time metrics were
-  queried. This function is useful for when you want other software to control
-  how reports are built, but you don't need to have the reports built and sent
-  at an interval.
+  The latest metrics are the metrics recorded between the last query for the
+  metrics and the query for the metrics that is being called.
   """
   @spec get_latest_metrics(Mobius.instance()) :: [metric()]
-  def get_latest_metrics(mobius_instance \\ :mobius) do
-    ReportingServer.get_latest_metrics(mobius_instance)
+  def get_latest_metrics(instance \\ :mobius) do
+    ReportServer.get_latest_metrics(instance)
+  end
+
+  @doc """
+  Get the latest events
+
+  The latest events are the events recorded between the last query for the
+  events and the query for the events that is being called.
+  """
+  @spec get_latest_events(Mobius.instance()) :: [Event.t()]
+  def get_latest_events(instance \\ :mobius) do
+    ReportServer.get_latest_events(instance)
   end
 end
