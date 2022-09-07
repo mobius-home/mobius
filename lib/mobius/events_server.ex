@@ -33,9 +33,9 @@ defmodule Mobius.EventsServer do
   @doc """
   List the events
   """
-  @spec list(Mobius.instance()) :: [Event.t()]
-  def list(instance \\ :mobius) do
-    GenServer.call(name(instance), :list)
+  @spec list(Mobius.instance(), [EventLog.opt()]) :: [Event.t()]
+  def list(instance \\ :mobius, opts) do
+    GenServer.call(name(instance), {:list, opts})
   end
 
   @doc """
@@ -98,8 +98,8 @@ defmodule Mobius.EventsServer do
   end
 
   @impl GenServer
-  def handle_call(:list, _from, state) do
-    {:reply, make_list(state.buffer), state}
+  def handle_call({:list, opts}, _from, state) do
+    {:reply, make_list(state.buffer, opts), state}
   end
 
   @impl GenServer
@@ -171,10 +171,16 @@ defmodule Mobius.EventsServer do
     end)
   end
 
-  defp make_list(buffer) do
+  defp make_list(buffer, opts) do
+    from = opts[:from] || 0
+    to = opts[:to] || System.system_time(:second)
+
     buffer
     |> CircularBuffer.to_list()
     |> Enum.sort_by(fn event -> event.timestamp end)
+    |> Enum.filter(fn event ->
+      event.timestamp >= from && event.timestamp <= to
+    end)
   end
 
   defp make_file_path(dir) do
