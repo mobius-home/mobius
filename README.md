@@ -230,6 +230,9 @@ end
 defp process_button_measurement({_, value}), do: value
 ```
 
+A good resource for understanding telemetry data and some of the differences
+between events and metrics is [New Relic's MELT 101 post](https://newrelic.com/platform/telemetry-data-101).
+
 ### Clocks
 
 For systems that lack battery-backed real-time clock which will advance the
