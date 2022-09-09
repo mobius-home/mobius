@@ -7,6 +7,36 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > Major version zero (0.y.z) is for initial development. Anything MAY change at
 any time. The public API SHOULD NOT be considered stable.
 
+## [v0.6.0] - 2022-09-09
+
+The breaking change in Mobius is the removal of remote reporting and the
+functionality built around that such as configuring a remote reporter to send
+a metric report at some interval.
+
+If you this functionality is something still want, you can provide a GenServer
+that executes your reporting code at some interval. This will allows the maximum
+flexibility to how you want your software to report metrics.
+
+### Changed
+
+* Remove `Mobius.RemoteReporter`
+* Remove `:remote_reporter` configuration from `Mobius.arg()`
+* Remove `:remote_reporter_interval` configuration from `Mobius.arg()`
+* Remove `Mobius.RemoteReporters.LoggerReporter`
+
+### Added
+
+* `Mobuis.Event`
+* `Mobuis.EventLog`
+* `Mobuis.Clock`
+* `Mobius.get_latest_metrics/1`
+* `Mobius.get_latest_events/1`
+* `:events` option to `Mobius.arg()`
+* `:event_log_size` option to `Mobius.arg()`
+* `:clock` option to `Mobius.arg()`
+* `:session` option to `Mobius.arg()`
+* `Mobius.session()`
+
 ## [v0.5.1] - 2022-06-01
 
 ### Added
@@ -202,6 +232,8 @@ basic maintenance like dependency updates and documentation improvements
 
 Initial release!
 
+[v0.6.0]: https://github.com/mattludwigs/mobius/compare/v0.5.1...v0.6.0
+[v0.5.1]: https://github.com/mattludwigs/mobius/compare/v0.5.0...v0.5.1
 [v0.5.0]: https://github.com/mattludwigs/mobius/compare/v0.4.0...v0.5.0
 [v0.4.0]: https://github.com/mattludwigs/mobius/compare/v0.3.7...v0.4.0
 [v0.3.7]: https://github.com/mattludwigs/mobius/compare/v0.3.6...v0.3.7
