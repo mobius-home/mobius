@@ -26,9 +26,9 @@ flexibility to how you want your software to report metrics.
 
 ### Added
 
-* `Mobuis.Event`
-* `Mobuis.EventLog`
-* `Mobuis.Clock`
+* `Mobius.Event`
+* `Mobius.EventLog`
+* `Mobius.Clock`
 * `Mobius.get_latest_metrics/1`
 * `Mobius.get_latest_events/1`
 * `:events` option to `Mobius.arg()`
