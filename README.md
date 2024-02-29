@@ -145,7 +145,7 @@ Mobius.Exports.mbf()
 ```
 
 The Mobius Binary Format (MBF) is a binary string that has encoded and
-compressed the all the historical metrics that mobius current has. This is
+compressed all the historical metrics that mobius current has. This is
 most useful for preparing metrics to send off to another system. To parse
 the binary format you can use `Mobius.Exports.parse_mbf/1`.
 
