@@ -50,7 +50,7 @@ Tags: %{}
 last_value: 83952736
 ```
 
-To plot a metric measurement over time you can use:  `Mobius.Exports.plot/4`:
+To plot a metric measurement over time you can use `Mobius.Exports.plot/4`:
 
 ```elixir
 iex> Mobius.Exports.plot("vm.memory.total", :last_value, %{})
