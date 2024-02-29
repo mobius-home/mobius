@@ -72,7 +72,7 @@ iex> Mobius.Exports.plot("vm.memory.total", :last_value, %{})
 ### Configure persistence directory
 
 By default Mobius will try to save metric data for all resolutions and the
-current value when the erlang system exists gracefully. This makes Mobius useful
+current value when the erlang system exits gracefully. This makes Mobius useful
 for Nerves devices that have to reboot after doing a planned firmware update.
 The default direction Mobius will try to persist data to is the `/data`
 directory as this is friendly to Nerves devices. If you want Mobius to store
