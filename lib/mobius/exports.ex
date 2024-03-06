@@ -10,9 +10,8 @@ defmodule Mobius.Exports do
   * Mobius Binary Format (MBF)
 
   The Mobius Binary Format (MBF) is a format that contains the current state of
-  all metrics. This binary format is useful for transfer metric information in
-  a useful format to another services to parse and use. For more details see
-  `mbf/1`.
+  all metrics. This binary format is useful for transferring metric information in
+  a format that other services can parse and use. For more details see `mbf/1`.
   """
 
   alias Mobius.Asciichart
@@ -49,7 +48,7 @@ defmodule Mobius.Exports do
   @typedoc """
   Metric types that can be exported
 
-  By default you can try to export any `Mobius.metric_type()`, but for then
+  By default you can try to export any `Mobius.metric_type()`, but for the
   summary metric type you can specify which summary type you want to export.
   """
   @type export_metric_type() :: Mobius.metric_type() | {:summary, atom()}
@@ -66,7 +65,7 @@ defmodule Mobius.Exports do
   # Write to console
   Mobius.Exports.csv("vm.memory.total", :last_value, %{}, iodevice: :stdio)
 
-  #Write to a file
+  # Write to a file
   file = File.open("mycsv.csv", [:write])
   :ok = Mobius.Exports.csv("vm.memory.total", :last_value, %{}, iodevice: file)
   ```
@@ -244,7 +243,7 @@ defmodule Mobius.Exports do
   @doc """
   Export all metrics in the Mobius Binary Format (MBF)
 
-  This is most useful for when you want to share metric data to different
+  This is mostly useful when you want to share metric data with different
   networked services.
 
   The binary format is `<<version, metric_data::binary>>`
@@ -262,7 +261,7 @@ defmodule Mobius.Exports do
   Mobius.Exports.to_mbf(out_dir: "/my/dir")
   ```
 
-  The generated file is returned in the as `{:ok, filename}`. The format of the
+  The generated file is returned as `{:ok, filename}`. The format of the
   file name is `YYYYMMDDHHMMSS-metrics.mbf`.
 
   See `Mobius.Exports.parse_mbf/1` to parse a binary in MBF.
