@@ -47,18 +47,18 @@ defmodule Mobius do
   * `:persistence_dir` - the top level directory where mobius will persist
   * `:autosave_interval` - time in seconds between automatic writes of the
      persistence data (default disabled) metric information
-  * `:database` - the `Mobius.RRD.t()` to use. This will default to the the default
+  * `:database` - the `Mobius.RRD.t()` to use. This will default to the default
      values found in `Mobius.RRD`
   * `:events` - a list of events for mobius to store in the event log
   * `:event_log_size` - number of events to store (defaults to 500)
   * `:clock` - module that implements the `Mobius.Clock` behaviour
   * `:session` - a unique id to distinguish between different ties Mobius has ran
 
-  Mobius sessions allow you collect events to analyze across different different
-  times mobius ran. A good example of this might measuring how fast an interface
+  Mobius sessions allow you collect events to analyze across the different times
+  mobius ran. A good example of this might be measuring how fast an interface
   makes its first connection. You can build averages over run times and measure
   connection performance. This will allow you to know on average how fast a
-  device connects and can check for increased or decreased performance between
+  device connects so you can check for increased or decreased performance between
   runs.
 
   By default Mobius will generate an UUID for each run.
