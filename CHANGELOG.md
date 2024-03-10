@@ -13,8 +13,8 @@ The breaking change in Mobius is the removal of remote reporting and the
 functionality built around that such as configuring a remote reporter to send
 a metric report at some interval.
 
-If you this functionality is something still want, you can provide a GenServer
-that executes your reporting code at some interval. This will allows the maximum
+If this functionality is something you still want, you can provide a GenServer
+that executes your reporting code at some interval. This will allow the maximum
 flexibility to how you want your software to report metrics.
 
 ### Changed
@@ -52,9 +52,9 @@ Breaking changes for three functions in the `Mobius.Exports` module:
 1. `Mobius.Exports.metrics/4`
 1. `Mobius.Exports.plot/4`
 
-If you are now directly calling these functions in code you're safe to upgrade.
+If you are not directly calling these functions in your code you're safe to upgrade.
 
-The first two use to return either `{:ok, results}` or `{:error, reason}` but
+The first two used to return either `{:ok, results}` or `{:error, reason}` but
 now they will only return their result. For `Mobius.Exports.series/4` the return
 value is now `[integer()]` and for `Mobius.Exports.metrics/4` the return type is
 now `[Mobius.metric()]`. `Mobius.Exports.plot/4` still returns `:ok` on success,
@@ -77,7 +77,7 @@ but can now return `{:error, UnsupportedMetricError.t()}`.
   server.
 * Add `:remote_reporter` and `:remote_report_interval` options to the
   `Mobius.arg()` type.
-* Super for specify which summery metric you want to export. (@ewildgoose)
+* Support for specifying which summery metric you want to export. (@ewildgoose)
 * Support for summary metrics types in some exports. (@ewildgoose)
 * Add standard deviation calculation to the summary metric type. (@ewildgoose)
 * New `Mobius.Exports.export_metric_type()` that allows for specifying the
@@ -99,7 +99,7 @@ but can now return `{:error, UnsupportedMetricError.t()}`.
 * `Mobius.name()` is now `Mobius.instance()`
 * Mobius functions that need to know the name of the mobius instance now
   expect `:mobius_instance` and not `:name`
-* `Mobius.metric_name()` is no longer a list of `atoms()` but is not the metric
+* `Mobius.metric_name()` is no longer a list of `atoms()` but is now the metric
   name as a string
 * `Mobius.RRD` internal metric format
 * `Mobius.RRD.insert/3` typespec now expects `[Mobius.metric()]` as the last
@@ -136,7 +136,7 @@ but can now return `{:error, UnsupportedMetricError.t()}`.
 
 ## [v0.3.7] - 2022-03-16
 
-This release brings in a bunch of new functionality and bug fixes. Along with
+This release brings in a bunch of new features and bug fixes. Along with
 basic maintenance like dependency updates and documentation improvements
 (@ewildgoose).
 

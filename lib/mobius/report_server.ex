@@ -4,7 +4,7 @@ defmodule Mobius.ReportServer do
   # server for building reports
 
   # Right now we will put this in a singleton that handles both metrics and
-  # events for convince, but if needed we can refactor to them into separate
+  # events for convenience, but if needed we can refactor them into separate
   # servers.
 
   use GenServer
