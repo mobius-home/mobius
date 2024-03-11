@@ -61,7 +61,7 @@ defmodule Mobius.MetricsTable do
   end
 
   @doc """
-  Put the metric information in to the metric table
+  Put the metric information into the metric table
   """
   @spec put(
           Mobius.instance(),

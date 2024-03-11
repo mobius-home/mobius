@@ -77,7 +77,7 @@ but can now return `{:error, UnsupportedMetricError.t()}`.
   server.
 * Add `:remote_reporter` and `:remote_report_interval` options to the
   `Mobius.arg()` type.
-* Support for specifying which summery metric you want to export. (@ewildgoose)
+* Support for specifying which summary metric you want to export. (@ewildgoose)
 * Support for summary metrics types in some exports. (@ewildgoose)
 * Add standard deviation calculation to the summary metric type. (@ewildgoose)
 * New `Mobius.Exports.export_metric_type()` that allows for specifying the
