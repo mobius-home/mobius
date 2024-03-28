@@ -33,7 +33,7 @@ defmodule Mobius.MixProject do
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
       {:telemetry, "~> 0.4.3 or ~> 1.0"},
-      {:telemetry_metrics, "~> 0.6.0"},
+      {:telemetry_metrics, "~> 0.6 or ~> 1.0"},
       {:circular_buffer, "~> 0.4.0"},
       {:uuid, "~> 1.1"}
     ]
