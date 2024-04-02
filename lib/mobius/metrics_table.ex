@@ -33,7 +33,7 @@ defmodule Mobius.MetricsTable do
         :ets.new(table_name, [:named_table, :public, :set])
 
       {:error, reason} ->
-        Logger.warn("[Mobius] Could not recover metrics from file because #{inspect(reason)}")
+        Logger.warning("[Mobius] Could not recover metrics from file because #{inspect(reason)}")
         :ets.new(table_name, [:named_table, :public, :set])
     end
   end

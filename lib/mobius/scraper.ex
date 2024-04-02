@@ -78,7 +78,7 @@ defmodule Mobius.Scraper do
         database
 
       {:error, %Mobius.DataLoadError{} = error} ->
-        Logger.warn(Exception.message(error))
+        Logger.warning(Exception.message(error))
 
         database
     end
@@ -171,7 +171,7 @@ defmodule Mobius.Scraper do
         :ok
 
       error ->
-        Logger.warn("Failed to save metrics history because #{inspect(error)}")
+        Logger.warning("Failed to save metrics history because #{inspect(error)}")
 
         error
     end

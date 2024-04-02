@@ -198,7 +198,7 @@ defmodule Mobius.EventsServer do
           state
 
         {:error, reason} ->
-          Logger.warn("[Mobius]: unable to save event log: #{inspect(reason)}")
+          Logger.warning("[Mobius]: unable to save event log: #{inspect(reason)}")
       end
 
     :ok
