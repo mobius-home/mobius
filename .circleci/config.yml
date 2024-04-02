@@ -1,76 +1,89 @@
-version: 2
+version: 2.1
 
-defaults: &defaults
-  working_directory: ~/repo
-  environment:
-    LC_ALL: C.UTF-8
+latest: &latest
+  pattern: "^1.16.*-erlang-26.*$"
 
-install_hex_rebar: &install_hex_rebar
-  run:
-    name: Install hex and rebar
-    command: |
-      mix local.hex --force
-      mix local.rebar --force
-install_system_deps: &install_system_deps
-  run:
-    name: Install system dependencies
-    command: |
-      apk add build-base
+tags: &tags
+  [
+    1.16.1-erlang-26.2.2-alpine-3.19.1,
+    1.15.7-erlang-26.1.2-alpine-3.18.4,
+    1.14.5-erlang-25.3.2-alpine-3.18.0,
+    1.13.4-erlang-25.3.2-alpine-3.18.0,
+    1.12.3-erlang-24.3.4.11-alpine-3.18.0,
+    1.11.4-erlang-23.3.4.13-alpine-3.15.3
+  ]
+
 jobs:
-  build_elixir_1_13_otp_24:
+  build-test:
+    parameters:
+      tag:
+        type: string
     docker:
-      - image: hexpm/elixir:1.13.1-erlang-24.0.2-alpine-3.15.0
-    <<: *defaults
+      - image: hexpm/elixir:<< parameters.tag >>
+    working_directory: ~/repo
+    environment:
+      LC_ALL: C.UTF-8
     steps:
+      - run:
+          name: Install system dependencies
+          command: apk add --no-cache git
       - checkout
-      - <<: *install_hex_rebar
-      - <<: *install_system_deps
+      - run:
+          name: Install hex and rebar
+          command: |
+            mix local.hex --force
+            mix local.rebar --force
       - restore_cache:
           keys:
-            - v1-mix-cache-{{ checksum "mix.lock" }}
+            - v1-mix-cache-<< parameters.tag >>-{{ checksum "mix.lock" }}
       - run: mix deps.get
-      - run: mix compile --warnings-as-errors
-      - run: mix format --check-formatted
-      - run: mix deps.unlock --check-unused
-      - run: mix test --include timeout
-      - run: mix docs
-      - run: mix hex.build
-      - run: MIX_ENV=test mix credo -a
-      - run: mix dialyzer
+      - run: mix test
+      - when:
+          condition:
+            matches: { <<: *latest, value: << parameters.tag >> }
+          steps:
+            - run: mix format --check-formatted
+            - run: mix deps.unlock --check-unused
+            - run: mix docs
+            - run: mix hex.build
+            - run: mix credo -a --strict
+            - run: mix dialyzer
       - save_cache:
-          key: v1-mix-cache-{{ checksum "mix.lock" }}
+          key: v1-mix-cache-<< parameters.tag >>-{{ checksum "mix.lock" }}
           paths:
             - _build
             - deps
 
-  build_elixir_1_12_otp_24:
+  automerge:
     docker:
-      - image: hexpm/elixir:1.12.1-erlang-24.0.2-alpine-3.13.3
-    <<: *defaults
+        - image: alpine:3.18.4
     steps:
-      - checkout
-      - <<: *install_hex_rebar
-      - <<: *install_system_deps
-      - run: mix deps.get
-      - run: mix compile
-      - run: mix test --include timeout
+      - run:
+          name: Install GitHub CLI
+          command: apk add --no-cache build-base github-cli
+      - run:
+          name: Attempt PR automerge
+          command: |
+            author=$(gh pr view "${CIRCLE_PULL_REQUEST}" --json author --jq '.author.login' || true)
 
-  build_elixir_1_11_otp_23:
-    docker:
-      - image: hexpm/elixir:1.11.3-erlang-23.2.2-alpine-3.12.1
-    <<: *defaults
-    steps:
-      - checkout
-      - <<: *install_hex_rebar
-      - <<: *install_system_deps
-      - run: mix deps.get
-      - run: mix compile
-      - run: mix test --include timeout
+            if [ "$author" = "app/dependabot" ]; then
+              gh pr merge "${CIRCLE_PULL_REQUEST}" --auto --rebase || echo "Failed trying to set automerge"
+            else
+              echo "Not a dependabot PR, skipping automerge"
+            fi
 
 workflows:
-  version: 2
-  build_test:
+  checks:
     jobs:
-      - build_elixir_1_13_otp_24
-      - build_elixir_1_12_otp_24
-      - build_elixir_1_11_otp_23
+      - build-test:
+          name: << matrix.tag >>
+          matrix:
+            parameters:
+              tag: *tags
+
+      - automerge:
+          requires: *tags
+          context: org-global
+          filters:
+            branches:
+              only: /^dependabot.*/
