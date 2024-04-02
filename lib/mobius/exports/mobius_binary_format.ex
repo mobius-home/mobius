@@ -36,9 +36,10 @@ defmodule Mobius.Exports.MobiusBinaryFormat do
 
   defp validate_metrics(metrics) when is_list(metrics) do
     Enum.all?(metrics, fn metric ->
-      Map.keys(metric) == [:name, :tags, :timestamp, :type, :value] && is_binary(metric.name) &&
-        is_integer(metric.value) && is_map(metric.tags) &&
-        is_integer(metric.timestamp) && is_valid_type(metric.type)
+      Enum.all?([:name, :tags, :timestamp, :type, :value], &Map.has_key?(metric, &1)) and
+        is_binary(metric.name) and
+        is_integer(metric.value) and is_map(metric.tags) and
+        is_integer(metric.timestamp) and is_valid_type(metric.type)
     end)
   end
 
