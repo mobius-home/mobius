@@ -7,6 +7,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > Major version zero (0.y.z) is for initial development. Anything MAY change at
 any time. The public API SHOULD NOT be considered stable.
 
+## [v0.6.1] - 2024-04-02
+
+### Changed
+
+* Allow `:telemetry_metrics` v1.0.0 and later now that it's been released
+* Fix `Logger.warn` deprecations
+* Fix binary format validation issue due to map sort order change in Erlang 26.
+
 ## [v0.6.0] - 2022-09-09
 
 The breaking change in Mobius is the removal of remote reporting and the
@@ -232,6 +240,7 @@ basic maintenance like dependency updates and documentation improvements
 
 Initial release!
 
+[v0.6.1]: https://github.com/mattludwigs/mobius/compare/v0.6.0...v0.6.1
 [v0.6.0]: https://github.com/mattludwigs/mobius/compare/v0.5.1...v0.6.0
 [v0.5.1]: https://github.com/mattludwigs/mobius/compare/v0.5.0...v0.5.1
 [v0.5.0]: https://github.com/mattludwigs/mobius/compare/v0.4.0...v0.5.0
