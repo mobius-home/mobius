@@ -39,13 +39,13 @@ defmodule Mobius.Exports.MobiusBinaryFormat do
       Enum.all?([:name, :tags, :timestamp, :type, :value], &Map.has_key?(metric, &1)) and
         is_binary(metric.name) and
         is_integer(metric.value) and is_map(metric.tags) and
-        is_integer(metric.timestamp) and is_valid_type(metric.type)
+        is_integer(metric.timestamp) and valid_type?(metric.type)
     end)
   end
 
   defp validate_metrics(_metrics), do: false
 
-  defp is_valid_type(type) do
+  defp valid_type?(type) do
     type in [:last_value, :counter, :sum, :summary]
   end
 end
