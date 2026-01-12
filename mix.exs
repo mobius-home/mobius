@@ -35,7 +35,7 @@ defmodule Mobius.MixProject do
       {:telemetry, "~> 0.4.3 or ~> 1.0"},
       {:telemetry_metrics, "~> 0.6 or ~> 1.0"},
       {:circular_buffer, "~> 0.4.0"},
-      {:uuid, "~> 1.1"}
+      {:elixir_uuid, "> 1.2.0"}
     ]
   end
 
