@@ -113,6 +113,7 @@ defmodule Mobius do
   @doc """
   Start Mobius
   """
+  @spec start_link([arg()]) :: Supervisor.on_start()
   def start_link(args) do
     Supervisor.start_link(__MODULE__, ensure_args(args), name: name(args[:mobius_instance]))
   end
@@ -187,11 +188,12 @@ defmodule Mobius do
   If you configured Mobius to use a different name then you can pass in your
   custom name to ensure Mobius requests the metrics from the right place.
   """
-  @spec info(Mobius.instance() | nil) :: :ok
+  @spec info() :: :ok
   def info() do
     info(@default_args[:mobius_instance])
   end
 
+  @spec info(Mobius.instance()) :: :ok
   def info(instance) do
     instance
     |> MetricsTable.get_entries()
@@ -224,9 +226,10 @@ defmodule Mobius do
   @doc """
   Persist the metrics to disk
   """
-  @spec save(instance()) :: :ok | {:error, reason :: term()}
+  @spec save() :: :ok | {:error, reason :: term()}
   def save(), do: save(@default_args[:mobius_instance])
 
+  @spec save(instance()) :: :ok | {:error, reason :: term()}
   def save(instance) do
     start_t = System.monotonic_time()
     prefix = [:mobius, :save]

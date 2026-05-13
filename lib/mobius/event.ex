@@ -57,6 +57,10 @@ defmodule Mobius.Event do
     end
   end
 
+  @doc """
+  Set the timestamp on an event
+  """
+  @spec set_timestamp(t(), integer()) :: t()
   def set_timestamp(event, timestamp) do
     %{event | timestamp: timestamp}
   end

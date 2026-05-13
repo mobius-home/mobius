@@ -32,9 +32,9 @@ defmodule Mobius.RRD do
   to study.
   """
 
-  @serialization_version 2
-
   require Logger
+
+  @serialization_version 2
 
   @opaque t() :: %{
             day: CircularBuffer.t(),

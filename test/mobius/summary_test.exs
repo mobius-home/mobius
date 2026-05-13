@@ -28,7 +28,7 @@ defmodule Mobius.SummaryTest do
   end
 
   test "calculate summary from summary data" do
-    expected_summary = %{min: 100, max: 400, average: 250, std_dev: 212.13203435596427}
+    expected_summary = %{min: 100, max: 400, average: 250.0, std_dev: 212.13203435596427}
 
     summary_data =
       100

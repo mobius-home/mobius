@@ -11,6 +11,7 @@ defmodule Mobius.ReportServer do
 
   alias Mobius.{Event, EventLog, Scraper}
 
+  @spec start_link([Mobius.arg()]) :: GenServer.on_start()
   def start_link(args) do
     GenServer.start_link(__MODULE__, args, name: name(args[:mobius_instance]))
   end
@@ -27,6 +28,10 @@ defmodule Mobius.ReportServer do
     GenServer.call(name(instance), :get_latest_events)
   end
 
+  @doc """
+  Get the latest metrics
+  """
+  @spec get_latest_metrics(Mobius.instance()) :: [Mobius.metric()]
   def get_latest_metrics(instance) do
     GenServer.call(name(instance), :get_latest_metrics)
   end
