@@ -124,6 +124,14 @@ defmodule Mobius.Events do
     :ok
   end
 
+  @spec process_event(
+          Mobius.instance(),
+          Mobius.session(),
+          :telemetry.event_name(),
+          :telemetry.event_measurements(),
+          :telemetry.event_metadata(),
+          keyword()
+        ) :: :ok
   def process_event(instance, session, event, measurements, metadata, opts) do
     measurements = process_measurements(measurements, opts)
     tags = get_event_tags(metadata, opts)

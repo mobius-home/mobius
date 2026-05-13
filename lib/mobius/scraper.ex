@@ -2,9 +2,10 @@ defmodule Mobius.Scraper do
   @moduledoc false
 
   use GenServer
-  require Logger
 
   alias Mobius.{MetricsTable, RRD}
+
+  require Logger
 
   @interval 1_000
 

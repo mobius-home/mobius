@@ -3,9 +3,9 @@ defmodule Mobius.EventsServer do
 
   use GenServer
 
-  require Logger
-
   alias Mobius.{Event, EventLog, TimeServer}
+
+  require Logger
 
   @file_name "event_log"
 

@@ -6,6 +6,6 @@ defmodule Mobius.AsciichartTest do
   test "Can generate a chart with nonvarying values" do
     # Ensure that we don't blow up when creating a chart with a single row of unvarying values
     assert {:ok, plot} = Asciichart.plot([1, 1, 1, 1])
-    assert plot == {:ok, "1.00 ┼───  \n        "}
+    assert plot == "1.00 ┼───  \n        "
   end
 end

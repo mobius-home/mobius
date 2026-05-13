@@ -6,16 +6,16 @@ defmodule Mobius.MetricsTable do
   # MetricTable object structure
   # {{normalize_metric_name, metric_type, metadata}, value}
 
+  alias Mobius.Summary
+  alias Telemetry.Metrics
+
+  require Logger
+
   @typedoc """
   A single entry of a metric in the metric table
   """
   @type metric_entry() ::
           {Mobius.metric_name(), Mobius.metric_type(), integer(), map()}
-
-  require Logger
-
-  alias Mobius.Summary
-  alias Telemetry.Metrics
 
   @doc """
   Initialize the metrics table
@@ -76,7 +76,8 @@ defmodule Mobius.MetricsTable do
   def put(table, event_name, :counter, _value, meta) do
     key = make_key(event_name, :counter, meta)
 
-    put_counter_type(table, key, 1)
+    # satisfy dialyzer about unused return
+    _ = put_counter_type(table, key, 1)
 
     :ok
   end
@@ -92,7 +93,7 @@ defmodule Mobius.MetricsTable do
   def put(table, metric_name, :sum, value, meta) do
     key = make_key(metric_name, :sum, meta)
 
-    put_counter_type(table, key, value)
+    _ = put_counter_type(table, key, value)
 
     :ok
   end
