@@ -7,6 +7,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > Major version zero (0.y.z) is for initial development. Anything MAY change at
 any time. The public API SHOULD NOT be considered stable.
 
+## [v0.7.0] - 2026-05-21
+
+### Changed
+
+* Raised the minimum Elixir version to 1.15.
+* Replaced the `uuid` dependency with `elixir_uuid`. The `uuid` hex package was
+  rebranded as `elixir_uuid` starting with v1.2.0, and keeping the old name
+  caused `mix release` to fail with duplicated `Elixir.UUID` modules in
+  projects that also depend on `elixir_uuid`.
+* `circular_buffer` requirement relaxed to `~> 0.4 or ~> 1.0`.
+
 ## [v0.6.1] - 2024-04-02
 
 ### Changed
@@ -240,6 +251,7 @@ basic maintenance like dependency updates and documentation improvements
 
 Initial release!
 
+[v0.7.0]: https://github.com/mattludwigs/mobius/compare/v0.6.1...v0.7.0
 [v0.6.1]: https://github.com/mattludwigs/mobius/compare/v0.6.0...v0.6.1
 [v0.6.0]: https://github.com/mattludwigs/mobius/compare/v0.5.1...v0.6.0
 [v0.5.1]: https://github.com/mattludwigs/mobius/compare/v0.5.0...v0.5.1
