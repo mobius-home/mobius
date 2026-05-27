@@ -91,12 +91,59 @@ defmodule Mobius.Metrics.MetricsTableTest do
     metric_name = "summary"
     :ok = MetricsTable.put(table, [:summary], :summary, 100)
 
-    assert [{^metric_name, :summary, %{accumulated: 100, max: 100, min: 100, reports: 1}, %{}}] =
+    assert [{^metric_name, :summary, %{accumulated: 100, reports: 1}, %{}}] =
              MetricsTable.get_entries_by_metric_name(table, metric_name)
 
     :ok = MetricsTable.put(table, [:summary], :summary, 120)
 
-    assert [{^metric_name, :summary, %{accumulated: 220, max: 120, min: 100, reports: 2}, %{}}] =
+    assert [{^metric_name, :summary, %{accumulated: 220, reports: 2}, %{}}] =
+             MetricsTable.get_entries_by_metric_name(table, metric_name)
+  end
+
+  # Persisted metrics tables from older Mobius versions contain summary entries
+  # with `:min` and `:max` keys. Loading those tables must still work — the
+  # unused keys should be ignored and subsequent updates should produce the
+  # current shape.
+  test "restore persisted summary entry that contains legacy :min/:max keys" do
+    persistence_dir =
+      Path.join(System.tmp_dir!(), "mobius_legacy_summary_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(persistence_dir)
+    on_exit(fn -> File.rm_rf!(persistence_dir) end)
+
+    table = :metrics_table_legacy_restore
+    :ets.new(table, [:named_table, :public, :set])
+
+    key = {[:legacy, :summary], :summary, %{}}
+
+    legacy_value = %{
+      reports: 2,
+      accumulated: 500,
+      accumulated_sqrd: 170_000,
+      min: 100,
+      max: 400
+    }
+
+    :ets.insert(table, {key, legacy_value})
+
+    :ok =
+      :ets.tab2file(table, String.to_charlist(Path.join(persistence_dir, "metrics_table")))
+
+    true = :ets.delete(table)
+
+    ^table = MetricsTable.init(mobius_instance: table, persistence_dir: persistence_dir)
+
+    metric_name = "legacy.summary"
+
+    assert [{^metric_name, :summary, ^legacy_value, %{}}] =
+             MetricsTable.get_entries_by_metric_name(table, metric_name)
+
+    :ok = MetricsTable.put(table, [:legacy, :summary], :summary, 200)
+
+    assert [
+             {^metric_name, :summary, %{accumulated: 700, accumulated_sqrd: 210_000, reports: 3},
+              %{}}
+           ] =
              MetricsTable.get_entries_by_metric_name(table, metric_name)
   end
 end

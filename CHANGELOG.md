@@ -7,6 +7,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > Major version zero (0.y.z) is for initial development. Anything MAY change at
 any time. The public API SHOULD NOT be considered stable.
 
+## Unreleased
+
+### Removed
+
+* Breaking change: `:min` and `:max` from summary metric output. These
+  values were never reset for the lifetime of the process, so a single
+  outlier would taint every later query.
+  They were more confusing than helpful and are removed.
+  The values are no longer returned from `Mobius.Exports.metrics/4` for the
+  `summary` type.
+
 ## [v0.7.0] - 2026-05-21
 
 ### Changed
