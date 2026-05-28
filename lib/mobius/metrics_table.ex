@@ -6,16 +6,16 @@ defmodule Mobius.MetricsTable do
   # MetricTable object structure
   # {{normalize_metric_name, metric_type, metadata}, value}
 
-  alias Mobius.Summary
-  alias Telemetry.Metrics
-
-  require Logger
-
   @typedoc """
   A single entry of a metric in the metric table
   """
   @type metric_entry() ::
           {Mobius.metric_name(), Mobius.metric_type(), integer(), map()}
+
+  require Logger
+
+  alias Mobius.Summary
+  alias Telemetry.Metrics
 
   @doc """
   Initialize the metrics table
@@ -76,8 +76,7 @@ defmodule Mobius.MetricsTable do
   def put(table, event_name, :counter, _value, meta) do
     key = make_key(event_name, :counter, meta)
 
-    # satisfy dialyzer about unused return
-    _ = put_counter_type(table, key, 1)
+    put_counter_type(table, key, 1)
 
     :ok
   end
@@ -93,7 +92,7 @@ defmodule Mobius.MetricsTable do
   def put(table, metric_name, :sum, value, meta) do
     key = make_key(metric_name, :sum, meta)
 
-    _ = put_counter_type(table, key, value)
+    put_counter_type(table, key, value)
 
     :ok
   end
@@ -150,6 +149,35 @@ defmodule Mobius.MetricsTable do
   @spec update_sum(Mobius.instance(), Metrics.normalized_metric_name(), integer(), map()) :: :ok
   def update_sum(table, metric_name, value, meta \\ %{}) do
     put(table, metric_name, :sum, value, meta)
+  end
+
+  @doc """
+  Increment a histogram bin counter.
+
+  Histogram bins back the `Mobius.DDSketch` representation: each populated
+  bin is one ETS counter row. `bin_key` is one of the tuples produced by
+  `Mobius.DDSketch.bin_key_for_value/2`:
+
+    * `{:hist, :pos, idx}` — positive value bin
+    * `{:hist, :neg, idx}` — negative value bin
+    * `{:hist, :zero}` — values folded into the zero bucket
+
+  This is a counter-style write, so it inherits every resilience property
+  the existing counter type has: ingress-time aggregation, snapshot via
+  `get_entries/1`, persistence via the regular `tab2file` dump.
+  """
+  @spec inc_histogram_bin(
+          Mobius.instance(),
+          Metrics.normalized_metric_name(),
+          Mobius.DDSketch.bin_key(),
+          map(),
+          pos_integer()
+        ) :: :ok
+  def inc_histogram_bin(table, metric_name, bin_key, meta \\ %{}, count \\ 1)
+      when is_integer(count) and count > 0 do
+    key = make_key(metric_name, bin_key, meta)
+    _ = put_counter_type(table, key, count)
+    :ok
   end
 
   @doc """

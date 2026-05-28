@@ -2,6 +2,7 @@ defmodule Mobius.Registry do
   @moduledoc false
 
   use GenServer
+  require Logger
 
   alias Mobius.MetricsTable
   alias Telemetry.Metrics
@@ -107,6 +108,9 @@ defmodule Mobius.Registry do
 
     {:noreply, state}
   end
+
+  defp maybe_remove_entry({_name, {:hist, _region, _idx}, _value, _meta}, _state), do: :ok
+  defp maybe_remove_entry({_name, {:hist, :zero}, _value, _meta}, _state), do: :ok
 
   defp maybe_remove_entry({metric_name, metric_type, _value, meta}, state) do
     metric_specs = Enum.map(state.metrics, &{&1.name, metric_as_type(&1), &1.tags})
