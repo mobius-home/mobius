@@ -74,6 +74,45 @@ defmodule Mobius.Events do
 
   defp handle_metric(%Summary{} = metric, value, labels, config) do
     MetricsTable.put(config.table, metric.name, :summary, value, labels)
+    maybe_record_histogram(metric, value, labels, config)
+  end
+
+  defp maybe_record_histogram(%Summary{} = metric, value, labels, config) do
+    case histogram_opts(metric) do
+      nil ->
+        :ok
+
+      opts ->
+        sketch = Mobius.DDSketch.new(opts)
+
+        case Mobius.DDSketch.bin_key_for_value(sketch, value) do
+          :drop -> :ok
+          bin_key -> MetricsTable.inc_histogram_bin(config.table, metric.name, bin_key, labels)
+        end
+    end
+  end
+
+  @doc """
+  Extract histogram opts from a metric's `reporter_options`.
+
+  Returns the option list to pass to `Mobius.DDSketch.new/1`, or `nil` if
+  histograms are not enabled for this metric. Only `Telemetry.Metrics.Summary`
+  supports the histogram option.
+  """
+  @spec histogram_opts(Telemetry.Metrics.t()) :: keyword() | nil
+  def histogram_opts(metric) do
+    case metric do
+      %Summary{reporter_options: ro} when is_list(ro) ->
+        case Keyword.get(ro, :histogram) do
+          nil -> nil
+          false -> nil
+          true -> []
+          opts when is_list(opts) -> opts
+        end
+
+      _ ->
+        nil
+    end
   end
 
   defp keep?(%{keep: nil}, _metadata), do: true
@@ -124,14 +163,6 @@ defmodule Mobius.Events do
     :ok
   end
 
-  @spec process_event(
-          Mobius.instance(),
-          Mobius.session(),
-          :telemetry.event_name(),
-          :telemetry.event_measurements(),
-          :telemetry.event_metadata(),
-          keyword()
-        ) :: :ok
   def process_event(instance, session, event, measurements, metadata, opts) do
     measurements = process_measurements(measurements, opts)
     tags = get_event_tags(metadata, opts)
