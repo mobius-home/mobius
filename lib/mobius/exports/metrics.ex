@@ -43,28 +43,37 @@ defmodule Mobius.Exports.Metrics do
     rows
   end
 
-  defp filter_metrics_for_metric(metrics, metric_name, :summary, tags) do
-    do_filter_metrics_for_metric(metrics, metric_name, :summary, tags)
-    |> Enum.map(fn metric ->
-      %{metric | value: metric.value |> Summary.calculate()}
+  defp filter_metrics_for_metric(records, metric_name, :summary, tags) do
+    records
+    |> do_filter_metrics_for_metric(metric_name, :summary, tags)
+    |> Enum.map(fn {ts, {name, type, value, tg}} ->
+      record_to_map({name, type, Summary.calculate(value), tg}, ts)
     end)
   end
 
-  defp filter_metrics_for_metric(metrics, metric_name, {:summary, summary_metric}, tags) do
-    do_filter_metrics_for_metric(metrics, metric_name, :summary, tags)
-    |> Enum.map(fn metric ->
-      %{metric | value: metric.value |> Summary.calculate() |> Map.get(summary_metric)}
+  defp filter_metrics_for_metric(records, metric_name, {:summary, summary_metric}, tags) do
+    records
+    |> do_filter_metrics_for_metric(metric_name, :summary, tags)
+    |> Enum.map(fn {ts, {name, type, value, tg}} ->
+      summarized = value |> Summary.calculate() |> Map.get(summary_metric)
+      record_to_map({name, type, summarized, tg}, ts)
     end)
   end
 
-  defp filter_metrics_for_metric(metrics, metric_name, type, tags) do
-    do_filter_metrics_for_metric(metrics, metric_name, type, tags)
+  defp filter_metrics_for_metric(records, metric_name, type, tags) do
+    records
+    |> do_filter_metrics_for_metric(metric_name, type, tags)
+    |> Enum.map(fn {ts, record} -> record_to_map(record, ts) end)
   end
 
-  defp do_filter_metrics_for_metric(metrics, metric_name, type, tags) do
-    Enum.filter(metrics, fn metric ->
-      metric_name == metric.name && match?(^tags, metric.tags) && type == metric.type
+  defp do_filter_metrics_for_metric(records, metric_name, type, tags) do
+    Enum.filter(records, fn {_ts, {name, rec_type, _value, rec_tags}} ->
+      metric_name == name && match?(^tags, rec_tags) && type == rec_type
     end)
+  end
+
+  defp record_to_map({name, type, value, tags}, ts) do
+    %{timestamp: ts, name: name, type: type, value: value, tags: tags}
   end
 
   defp query_opts(opts) do

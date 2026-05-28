@@ -31,8 +31,12 @@ defmodule Mobius.Scraper do
 
   @doc """
   Get all the records
+
+  Returns a flat list of `{timestamp, record}` pairs, where `record` is a packed
+  `{name, type, value, tags}` tuple. Callers that need the public
+  `t:Mobius.metric/0` map shape should pipe through `to_metric/1`.
   """
-  @spec all(Mobius.instance(), [all_opt()]) :: [Mobius.metric()]
+  @spec all(Mobius.instance(), [all_opt()]) :: [{Mobius.timestamp(), Mobius.record()}]
   def all(instance, opts \\ []) do
     GenServer.call(name(instance), {:get, opts})
   end
@@ -90,9 +94,17 @@ defmodule Mobius.Scraper do
   end
 
   defp to_metrics_list(timestamped_metrics) do
-    Enum.flat_map(timestamped_metrics, fn {_, metrics} ->
-      metrics
+    Enum.flat_map(timestamped_metrics, fn {ts, records} ->
+      Enum.map(records, fn record -> {ts, record} end)
     end)
+  end
+
+  @doc """
+  Materialize a packed record (and its timestamp) into a `Mobius.metric/0` map
+  """
+  @spec to_metric({Mobius.timestamp(), Mobius.record()}) :: Mobius.metric()
+  def to_metric({ts, {name, type, value, tags}}) do
+    %{timestamp: ts, name: name, type: type, value: value, tags: tags}
   end
 
   @impl GenServer
@@ -135,7 +147,6 @@ defmodule Mobius.Scraper do
 
       scrape ->
         ts = System.system_time(:second)
-        scrape = scrape_to_metrics_list(ts, scrape)
         database = RRD.insert(state.database, ts, scrape)
 
         {:noreply, %{state | database: database}}
@@ -149,18 +160,6 @@ defmodule Mobius.Scraper do
   @impl GenServer
   def terminate(_reason, state) do
     save_to_persistence(state)
-  end
-
-  defp scrape_to_metrics_list(ts, scrape) do
-    Enum.map(scrape, fn {name, type, value, tags} ->
-      %{
-        timestamp: ts,
-        name: name,
-        type: type,
-        value: value,
-        tags: tags
-      }
-    end)
   end
 
   # Write our database to persistent storage
