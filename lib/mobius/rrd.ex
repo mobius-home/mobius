@@ -32,9 +32,9 @@ defmodule Mobius.RRD do
   to study.
   """
 
-  require Logger
+  @serialization_version 3
 
-  @serialization_version 2
+  require Logger
 
   @opaque t() :: %{
             day: CircularBuffer.t(),
@@ -100,7 +100,7 @@ defmodule Mobius.RRD do
   @doc """
   Insert an item for the specified time
   """
-  @spec insert(t(), integer(), [Mobius.metric()]) :: t()
+  @spec insert(t(), integer(), [Mobius.record()]) :: t()
   def insert(rrd, ts, item) do
     value = {ts, item}
 
@@ -159,6 +159,16 @@ defmodule Mobius.RRD do
     data
     |> :erlang.binary_to_term()
     |> migrate_data(1)
+    |> migrate_data(2)
+    |> do_load(rrd)
+  catch
+    _, _ -> {:error, Mobius.DataLoadError.exception(reason: :corrupt, who: rrd)}
+  end
+
+  def load(rrd, <<2, data::binary>>) do
+    data
+    |> :erlang.binary_to_term()
+    |> migrate_data(2)
     |> do_load(rrd)
   catch
     _, _ -> {:error, Mobius.DataLoadError.exception(reason: :corrupt, who: rrd)}
@@ -185,7 +195,9 @@ defmodule Mobius.RRD do
     {:ok, loaded}
   end
 
-  # migrate data from version 1 to current
+  # migrate data from version 1 to version 2: turn dotted-list names into binaries
+  # and rewrite legacy tuple-shape records as 5-key maps so the v2 → v3 step can
+  # handle them uniformly.
   defp migrate_data(data, 1) do
     Enum.map(data, fn {timestamp, metrics} ->
       metrics =
@@ -198,13 +210,30 @@ defmodule Mobius.RRD do
     end)
   end
 
+  # migrate data from version 2 to version 3: drop the redundant inner
+  # `:timestamp` field and pack each record as a positional tuple.
+  defp migrate_data(data, 2) do
+    Enum.map(data, fn {timestamp, metrics} ->
+      metrics =
+        Enum.map(metrics, fn
+          %{name: name, type: type, value: value, tags: tags} ->
+            {name, type, value, tags}
+
+          {_name, _type, _value, _tags} = record ->
+            record
+        end)
+
+      {timestamp, metrics}
+    end)
+  end
+
   @typedoc """
   Options for saving RRD into a binary
 
   * `:serialization_version` - the version of serialization format, defaults to
     most recent
   """
-  @type save_opt() :: {:serialization_version, 1 | 2}
+  @type save_opt() :: {:serialization_version, 1 | 2 | 3}
 
   @doc """
   Serialize to an iolist
@@ -219,7 +248,7 @@ defmodule Mobius.RRD do
   @doc """
   Return all items in order
   """
-  @spec all(t()) :: [{Mobius.timestamp(), [Mobius.metric()]}]
+  @spec all(t()) :: [{Mobius.timestamp(), [Mobius.record()]}]
   def all(rrd) do
     result =
       CircularBuffer.to_list(rrd.day) ++

@@ -108,6 +108,15 @@ defmodule Mobius do
           name: binary()
         }
 
+  @typedoc """
+  Packed metric record used in the in-memory RRD
+
+  This is the storage shape of a single metric inside a scrape snapshot. The
+  timestamp lives one level up on the snapshot itself, so the inner tuple only
+  carries identity (`name`, `tags`), `type`, and `value`.
+  """
+  @type record() :: {metric_name(), metric_type(), term(), map()}
+
   @type timestamp() :: integer()
 
   @doc """

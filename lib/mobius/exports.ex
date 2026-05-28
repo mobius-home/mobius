@@ -272,7 +272,8 @@ defmodule Mobius.Exports do
 
     mobius_instance
     |> Mobius.Scraper.all()
-    |> Enum.reject(fn metric -> metric.type == :summary end)
+    |> Enum.reject(fn {_ts, {_name, type, _value, _tags}} -> type == :summary end)
+    |> Enum.map(&Mobius.Scraper.to_metric/1)
     |> MobiusBinaryFormat.to_iodata()
     |> maybe_write_file(opts)
   end

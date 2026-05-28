@@ -53,7 +53,10 @@ defmodule Mobius.ReportServer do
   def handle_call(:get_latest_metrics, _from, state) do
     {from, to} = get_query_window(state, :metrics)
 
-    metrics = Scraper.all(state.instance, from: from, to: to)
+    metrics =
+      state.instance
+      |> Scraper.all(from: from, to: to)
+      |> Enum.map(&Scraper.to_metric/1)
 
     {:reply, metrics, %{state | metrics_next_start: to + 1}}
   end
