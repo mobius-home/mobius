@@ -1,13 +1,13 @@
 defmodule Mobius.MixProject do
   use Mix.Project
 
-  @version "0.7.0"
+  @version "0.6.1"
 
   def project do
     [
       app: :mobius,
       version: @version,
-      elixir: "~> 1.15",
+      elixir: "~> 1.11",
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
@@ -15,12 +15,8 @@ defmodule Mobius.MixProject do
       description: description(),
       package: package(),
       docs: docs(),
-      name: "Mobius"
+      preferred_cli_env: [docs: :docs, "hex.publish": :docs]
     ]
-  end
-
-  def cli do
-    [preferred_envs: [docs: :docs, "hex.publish": :docs, precommit: :test]]
   end
 
   # Run "mix help compile.app" to learn about applications.
@@ -33,24 +29,28 @@ defmodule Mobius.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:ex_doc, "~> 0.40", only: :docs, runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.24", only: :docs, runtime: false},
+      {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
+      {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
       {:telemetry, "~> 0.4.3 or ~> 1.0"},
       {:telemetry_metrics, "~> 0.6 or ~> 1.0"},
       {:circular_buffer, "~> 0.4 or ~> 1.0"},
-      {:elixir_uuid, "~> 1.2"}
+      {:elixir_uuid, "> 1.2.0"}
     ]
   end
 
   defp docs() do
     [
-      extras: ["README.md", "CHANGELOG.md"],
+      extras: [
+        "README.md",
+        "guides/histograms.md": [title: "Histogram configurations"],
+        "CHANGELOG.md": []
+      ],
       main: "readme",
       source_ref: "v#{@version}",
       source_url: "https://github.com/mobius-home/mobius",
       skip_undefined_reference_warnings_on: ["CHANGELOG.md"],
-      assets: %{"assets" => "assets"},
+      assets: "assets",
       logo: "assets/m.png"
     ]
   end
@@ -62,8 +62,7 @@ defmodule Mobius.MixProject do
   defp package do
     [
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/mobius-home/mobius"},
-      name: :mobius
+      links: %{"GitHub" => "https://github.com/mobius-home/mobius"}
     ]
   end
 
@@ -76,16 +75,7 @@ defmodule Mobius.MixProject do
 
   defp aliases() do
     [
-      test: ["test --exclude timeout"],
-      precommit: [
-        "hex.audit",
-        "compile --warnings-as-errors --force",
-        "format",
-        "credo --strict --all",
-        "deps.unlock --unused",
-        "dialyzer",
-        "test"
-      ]
+      test: ["test --exclude timeout"]
     ]
   end
 end

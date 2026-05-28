@@ -153,6 +153,49 @@ the binary format you can use `Mobius.Exports.parse_mbf/1`.
 
 For each of these you can see the `Mobius.Exports` module for more details.
 
+### Histograms (percentiles, SLO compliance, heatmaps)
+
+A `summary` metric only carries `min`, `max`, `average`, `std_dev`. For
+percentiles, SLO counts, or distribution-shape data, opt into a
+DDSketch histogram alongside the summary:
+
+```elixir
+Telemetry.Metrics.summary("http.request.duration",
+  measurement: :duration,
+  reporter_options: [
+    histogram: [
+      min_indexable_value: 0.1,        # noise floor
+      max_indexable_value: 60_000.0,   # realistic ceiling; outliers clamp here
+      relative_accuracy: 0.1           # ±10% quantile error (default 0.1)
+    ]
+  ]
+)
+```
+
+Query a window via `Mobius.Exports`:
+
+```elixir
+{:ok, p99} = Mobius.Exports.quantile("http.request.duration", 0.99)
+{:ok, qs}  = Mobius.Exports.quantiles("http.request.duration", [0.5, 0.95, 0.99])
+{:ok, ok}  = Mobius.Exports.histogram_count_below("http.request.duration", 200, %{}, last: {1, :hour})
+```
+
+#### Memory and disk
+
+Histograms cost memory (live ETS and Scraper heap) and disk
+(persisted history). The right `min` / `max` / `α` for your metric
+matters: a sensible scoping (e.g. HTTP latency 0.1–60_000 ms at the
+default α=0.1) is ~844 KB heap and ~158 KB disk per metric across the
+default retention. A loose accuracy on a narrow range (FPS-tracking
+in milliseconds at α=0.2) drops to ~300 KB heap / ~100 KB disk. The
+out-of-the-box defaults span 27 decades of value range and cost
+~3.2 MB heap / ~544 KB disk; almost always worth tightening.
+
+See [Histogram configurations](guides/histograms.md) for worked
+examples covering common metric shapes (HTTP latency, FPS, memory,
+flash writes, throughput, boot time), the full cost tables, the
+tuning grid, and the trade-offs between α and value range.
+
 ### Report metrics to a remote server
 
 Mobius allows sending metrics to a remote server. You can do this by passing the

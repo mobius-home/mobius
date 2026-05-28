@@ -9,6 +9,28 @@ any time. The public API SHOULD NOT be considered stable.
 
 ## Unreleased
 
+### Added
+
+* DDSketch-backed histograms on `summary`-type metrics. Opt in per
+  metric via `reporter_options: [histogram: [...]]` to get percentiles
+  (P50/P95/P99), SLO-style "% under threshold" counts, and
+  distribution-shape data alongside the existing summary aggregate.
+  Query via `Mobius.Exports.histogram/3`, `quantile/4`, `quantiles/4`,
+  `histogram_count_below/4`, and `histogram_count_above/4`. See the
+  Histogram configurations guide for worked examples.
+* `Mobius.DDSketch`: sparse mergeable quantile sketch backing the
+  histogram feature. Configurable α (default 0.1, ±10%), value range,
+  and overflow behaviour (`:clamp` saturates to the top bin, `:drop`
+  silently skips).
+* `Mobius.Scraper.all_histograms/2` for windowed access to the
+  per-snapshot histogram sidecar data.
+
+### Changed
+
+* RRD format v3 snapshots now carry a `{records, histograms_sidecar}`
+  tuple. The v2 -> v3 migration wraps existing records in the new
+  shape with an empty sidecar, so persisted v2 files keep loading.
+
 ### Removed
 
 * Breaking change: `:min` and `:max` from summary metric output. These
