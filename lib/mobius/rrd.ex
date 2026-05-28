@@ -97,10 +97,24 @@ defmodule Mobius.RRD do
     }
   end
 
+  @typedoc """
+  Snapshot payload stored at each RRD timestamp.
+
+  A `{records, histograms_sidecar}` tuple where `records` is the list of
+  regular `t:Mobius.record/0` tuples and `histograms_sidecar` is the
+  compact per-metric histogram bin payload from `Mobius.Scraper`.
+
+  Plain `[Mobius.metric_record()]` is also accepted for backwards compatibility
+  with older callers; it is treated as records with an empty sidecar.
+  """
+  @type snapshot() ::
+          {[Mobius.metric_record()], Mobius.Scraper.histograms_sidecar()}
+          | [Mobius.metric_record()]
+
   @doc """
   Insert an item for the specified time
   """
-  @spec insert(t(), integer(), [Mobius.metric_record()]) :: t()
+  @spec insert(t(), integer(), snapshot()) :: t()
   def insert(rrd, ts, item) do
     value = {ts, item}
 
@@ -211,10 +225,12 @@ defmodule Mobius.RRD do
   end
 
   # migrate data from version 2 to version 3: drop the redundant inner
-  # `:timestamp` field and pack each record as a positional tuple.
+  # `:timestamp` field, pack each record as a positional tuple, and wrap
+  # the records list in a `{records, histograms_sidecar}` snapshot tuple.
+  # v2 files never carried histogram data, so the sidecar is empty.
   defp migrate_data(data, 2) do
     Enum.map(data, fn {timestamp, metrics} ->
-      metrics =
+      records =
         Enum.map(metrics, fn
           %{name: name, type: type, value: value, tags: tags} ->
             {name, type, value, tags}
@@ -223,7 +239,7 @@ defmodule Mobius.RRD do
             record
         end)
 
-      {timestamp, metrics}
+      {timestamp, {records, %{}}}
     end)
   end
 
@@ -248,7 +264,7 @@ defmodule Mobius.RRD do
   @doc """
   Return all items in order
   """
-  @spec all(t()) :: [{Mobius.timestamp(), [Mobius.metric_record()]}]
+  @spec all(t()) :: [{Mobius.timestamp(), snapshot()}]
   def all(rrd) do
     result =
       CircularBuffer.to_list(rrd.day) ++
@@ -261,7 +277,7 @@ defmodule Mobius.RRD do
   @doc """
   Return all items within the specified range
   """
-  @spec query(t(), from :: integer(), to :: integer()) :: [{integer(), any()}]
+  @spec query(t(), from :: integer(), to :: integer()) :: [{integer(), snapshot()}]
   def query(rrd, from, to) do
     rrd
     |> all()
@@ -272,7 +288,7 @@ defmodule Mobius.RRD do
   @doc """
   Return all items with timestamps equal to or after the specified one
   """
-  @spec query(t(), from :: integer()) :: [{integer(), any()}]
+  @spec query(t(), from :: integer()) :: [{integer(), snapshot()}]
   def query(rrd, from) do
     rrd
     |> all()

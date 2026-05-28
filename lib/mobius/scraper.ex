@@ -93,9 +93,44 @@ defmodule Mobius.Scraper do
     Path.join(state.persistence_dir, "history")
   end
 
-  defp to_metrics_list(timestamped_metrics) do
-    Enum.flat_map(timestamped_metrics, fn {ts, records} ->
-      Enum.map(records, fn record -> {ts, record} end)
+  @typedoc """
+  Compact per-snapshot histogram payload.
+
+  Outer map keyed by `{metric_name, tags}`. Each entry is a 3-tuple of
+  positive bins (`%{idx => count}`), negative bins, and the zero-bucket
+  count. Mirrors the field shape of `t:Mobius.DDSketch.t/0` so the query
+  path reconstructs a sketch with one struct update.
+  """
+  @type histograms_sidecar() :: %{
+          {Mobius.metric_name(), map()} =>
+            {%{integer() => pos_integer()}, %{integer() => pos_integer()}, non_neg_integer()}
+        }
+
+  @doc """
+  Get the per-snapshot histogram sidecars in the requested time range.
+
+  Returns a list of `{ts, sidecar}` tuples sorted by timestamp. Empty
+  sidecars (snapshots that captured no histogram bins) are still
+  returned with a `%{}` payload so callers can position window
+  boundaries.
+  """
+  @spec all_histograms(Mobius.instance(), [all_opt()]) :: [{integer(), histograms_sidecar()}]
+  def all_histograms(instance, opts \\ []) do
+    GenServer.call(name(instance), {:get_histograms, opts})
+  end
+
+  defp to_metrics_list(timestamped_snapshots) do
+    Enum.flat_map(timestamped_snapshots, fn
+      {ts, {records, _histograms}} -> Enum.map(records, fn record -> {ts, record} end)
+      # Tolerate the legacy pre-v3 shape just in case.
+      {ts, records} when is_list(records) -> Enum.map(records, fn record -> {ts, record} end)
+    end)
+  end
+
+  defp to_histograms_list(timestamped_snapshots) do
+    Enum.map(timestamped_snapshots, fn
+      {ts, {_records, histograms}} -> {ts, histograms}
+      {ts, _records} -> {ts, %{}}
     end)
   end
 
@@ -109,33 +144,29 @@ defmodule Mobius.Scraper do
 
   @impl GenServer
   def handle_call({:get, opts}, _from, state) do
-    case Keyword.get(opts, :from) do
-      nil ->
-        metrics =
-          state.database
-          |> RRD.all()
-          |> to_metrics_list()
+    snapshots = query_snapshots(state, opts)
+    {:reply, to_metrics_list(snapshots), state}
+  end
 
-        {:reply, metrics, state}
-
-      from ->
-        {:reply, query_database(from, state, opts), state}
-    end
+  def handle_call({:get_histograms, opts}, _from, state) do
+    snapshots = query_snapshots(state, opts)
+    {:reply, to_histograms_list(snapshots), state}
   end
 
   def handle_call(:save, _from, state) do
     {:reply, save_to_persistence(state), state}
   end
 
-  defp query_database(from, state, opts) do
-    case opts[:to] do
+  defp query_snapshots(state, opts) do
+    case Keyword.get(opts, :from) do
       nil ->
-        RRD.query(state.database, from)
-        |> to_metrics_list()
+        RRD.all(state.database)
 
-      to ->
-        RRD.query(state.database, from, to)
-        |> to_metrics_list()
+      from ->
+        case opts[:to] do
+          nil -> RRD.query(state.database, from)
+          to -> RRD.query(state.database, from, to)
+        end
     end
   end
 
@@ -145,9 +176,10 @@ defmodule Mobius.Scraper do
       [] ->
         {:noreply, state}
 
-      scrape ->
+      entries ->
         ts = System.system_time(:second)
-        database = RRD.insert(state.database, ts, scrape)
+        snapshot = build_snapshot(entries)
+        database = RRD.insert(state.database, ts, snapshot)
 
         {:noreply, %{state | database: database}}
     end
@@ -155,6 +187,40 @@ defmodule Mobius.Scraper do
 
   def handle_info(_message, state) do
     {:noreply, state}
+  end
+
+  # Split incoming entries into the regular records list and the compact
+  # per-metric histogram sidecar. See histograms_sidecar/0.
+  defp build_snapshot(entries) do
+    Enum.reduce(entries, {[], %{}}, fn entry, {records, hists} ->
+      case entry do
+        {name, {:hist, :pos, idx}, value, tags} ->
+          {records, put_hist_bin(hists, {name, tags}, :positive, idx, value)}
+
+        {name, {:hist, :neg, idx}, value, tags} ->
+          {records, put_hist_bin(hists, {name, tags}, :negative, idx, value)}
+
+        {name, {:hist, :zero}, value, tags} ->
+          {records, put_zero(hists, {name, tags}, value)}
+
+        {_name, _type, _value, _tags} = record ->
+          {[record | records], hists}
+      end
+    end)
+  end
+
+  defp put_hist_bin(hists, key, region, idx, value) do
+    {pos, neg, zero} = Map.get(hists, key, {%{}, %{}, 0})
+
+    case region do
+      :positive -> Map.put(hists, key, {Map.put(pos, idx, value), neg, zero})
+      :negative -> Map.put(hists, key, {pos, Map.put(neg, idx, value), zero})
+    end
+  end
+
+  defp put_zero(hists, key, value) do
+    {pos, neg, _zero} = Map.get(hists, key, {%{}, %{}, 0})
+    Map.put(hists, key, {pos, neg, value})
   end
 
   @impl GenServer

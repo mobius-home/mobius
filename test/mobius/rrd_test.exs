@@ -44,8 +44,8 @@ defmodule Mobius.RRDTest do
 
       expected_rrd =
         RRD.new(@args)
-        |> RRD.insert(1234, [{"vm.memory.total", :last_value, 123, %{}}])
-        |> RRD.insert(3000, [{"vm.memory.total", :last_value, 124, %{}}])
+        |> RRD.insert(1234, {[{"vm.memory.total", :last_value, 123, %{}}], %{}})
+        |> RRD.insert(3000, {[{"vm.memory.total", :last_value, 124, %{}}], %{}})
 
       in_rrd_binary = RRD.save(in_rrd, serialization_version: 1) |> IO.iodata_to_binary()
       assert RRD.load(RRD.new(@args), in_rrd_binary) == {:ok, expected_rrd}
@@ -63,18 +63,32 @@ defmodule Mobius.RRDTest do
 
       expected_rrd =
         RRD.new(@args)
-        |> RRD.insert(1234, [{"vm.memory.total", :last_value, 123, %{}}])
-        |> RRD.insert(3000, [{"vm.memory.total", :last_value, 124, %{}}])
+        |> RRD.insert(1234, {[{"vm.memory.total", :last_value, 123, %{}}], %{}})
+        |> RRD.insert(3000, {[{"vm.memory.total", :last_value, 124, %{}}], %{}})
 
       v2_binary = RRD.save(v2_in_rrd, serialization_version: 2) |> IO.iodata_to_binary()
       assert RRD.load(RRD.new(@args), v2_binary) == {:ok, expected_rrd}
     end
 
-    test "version 3" do
+    test "version 3 (records and empty histograms sidecar)" do
       rrd =
         RRD.new(@args)
-        |> RRD.insert(1234, [{"vm.memory.total", :last_value, 123, %{}}])
-        |> RRD.insert(3000, [{"vm.memory.total", :last_value, 124, %{}}])
+        |> RRD.insert(1234, {[{"vm.memory.total", :last_value, 123, %{}}], %{}})
+        |> RRD.insert(3000, {[{"vm.memory.total", :last_value, 124, %{}}], %{}})
+
+      rrd_binary = RRD.save(rrd) |> IO.iodata_to_binary()
+      assert RRD.load(RRD.new(@args), rrd_binary) == {:ok, rrd}
+    end
+
+    test "version 3 with populated histogram sidecar" do
+      sidecar = %{{"latency.ms", %{}} => {%{1 => 3, 2 => 17}, %{}, 0}}
+
+      rrd =
+        RRD.new(@args)
+        |> RRD.insert(
+          1234,
+          {[{"vm.memory.total", :last_value, 123, %{}}], sidecar}
+        )
 
       rrd_binary = RRD.save(rrd) |> IO.iodata_to_binary()
       assert RRD.load(RRD.new(@args), rrd_binary) == {:ok, rrd}
