@@ -17,5 +17,5 @@ end
 
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
 and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/example](https://hexdocs.pm/example).
+be found at [https://example.hexdocs.pm](https://hexdocs.pm/example).
 

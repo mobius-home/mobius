@@ -32,7 +32,7 @@ def start(_type, _args) do
     # ... other children ....
   ]
 
-  # See https://hexdocs.pm/elixir/Supervisor.html
+  # See https://elixir.hexdocs.pm/Supervisor.html
   # for other strategies and supported options
   opts = [strategy: :one_for_one, name: MyApp.Supervisor]
   Supervisor.start_link(children, opts)
@@ -116,7 +116,7 @@ def start(_type, _args) do
     # ... other children ....
   ]
 
-  # See https://hexdocs.pm/elixir/Supervisor.html
+  # See https://elixir.hexdocs.pm/Supervisor.html
   # for other strategies and supported options
   opts = [strategy: :one_for_one, name: MyApp.Supervisor]
   Supervisor.start_link(children, opts)
