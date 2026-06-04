@@ -257,18 +257,31 @@ defmodule Mobius.Scraper do
     save_to_persistence(state)
   end
 
-  # Write our database to persistent storage. The persistence directory may
-  # have been unavailable at boot (or gone away since) — re-create it on
-  # every attempt so saving recovers as soon as the filesystem allows.
+  # Write our database to persistent storage. Write-to-tmp + fsync + rename so a
+  # power cut mid-write leaves the previous file intact instead of a truncated one
+  # the next boot cannot load (and would then overwrite on its first autosave).
+  # The persistence directory may have been unavailable at boot (or gone away
+  # since), so re-create it on every attempt.
   defp save_to_persistence(state) do
+    path = file(state)
+    tmp = path <> ".tmp"
     contents = RRD.save(state.database, histogram_configs: state.histogram_configs)
     _ = File.mkdir_p(state.persistence_dir)
 
-    case File.write(file(state), contents) do
+    result =
+      with {:ok, fd} <- File.open(tmp, [:write, :binary]),
+           :ok <- IO.binwrite(fd, contents),
+           :ok <- :file.sync(fd),
+           :ok <- File.close(fd) do
+        File.rename(tmp, path)
+      end
+
+    case result do
       :ok ->
         :ok
 
       error ->
+        _ = File.rm(tmp)
         Logger.warning("Failed to save metrics history because #{inspect(error)}")
 
         error
