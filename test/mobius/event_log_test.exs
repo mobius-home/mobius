@@ -51,6 +51,34 @@ defmodule Mobius.EventLogTest do
     assert event_log == events
   end
 
+  @tag :tmp_dir
+  test "save persists the event log so a fresh instance restores it", %{tmp_dir: tmp_dir} do
+    instance = :event_log_roundtrip
+
+    events = [
+      Event.new("test", "a.b.c", %{a: 1}, %{}, timestamp: 1),
+      Event.new("test", "d.e.f", %{a: 2}, %{}, timestamp: 2)
+    ]
+
+    start_supervised!({Mobius, mobius_instance: instance, persistence_dir: tmp_dir})
+    Enum.each(events, fn event -> EventsServer.insert(instance, event) end)
+
+    assert :ok = EventLog.save(instance: instance)
+
+    # The dump landed at the real path with no temp file left behind.
+    # Mobius nests persistence under a per-instance subdirectory.
+    persistence_path = Path.join(tmp_dir, to_string(instance))
+    assert File.exists?(Path.join(persistence_path, "event_log"))
+    refute File.exists?(Path.join(persistence_path, "event_log.tmp"))
+
+    stop_supervised!(Mobius)
+
+    # A fresh instance pointed at the same dir recovers the events from disk.
+    start_supervised!({Mobius, mobius_instance: instance, persistence_dir: tmp_dir})
+
+    assert EventLog.list(instance: instance) == events
+  end
+
   defp load_event_log(log_name, dir, events) do
     start_supervised!({Mobius, mobius_instance: log_name, persistence_dir: dir})
 

@@ -110,16 +110,20 @@ defmodule Mobius.MetricsTable do
   @doc """
   Save the ets table to a file
 
-  The persistence directory may have been unavailable at boot (or gone
-  away since) — re-create it on every attempt so saving recovers as soon
-  as the filesystem allows.
+  Dumps to a tmp file (synced) and renames it into place, so a power cut
+  mid-write cannot corrupt the previous dump. The persistence directory may
+  have been unavailable at boot (or gone away since), so re-create it on
+  every attempt — saving recovers as soon as the filesystem allows.
   """
   @spec save(Mobius.instance(), Path.t()) :: :ok | {:error, reason :: term()}
   def save(instance, persistence_dir) do
     _ = File.mkdir_p(persistence_dir)
-    file = String.to_charlist("#{persistence_dir}/metrics_table")
+    path = Path.join(persistence_dir, "metrics_table")
+    tmp = path <> ".tmp"
 
-    :ets.tab2file(instance, file)
+    with :ok <- :ets.tab2file(instance, String.to_charlist(tmp), sync: true) do
+      File.rename(tmp, path)
+    end
   end
 
   @doc """
