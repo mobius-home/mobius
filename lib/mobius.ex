@@ -115,7 +115,7 @@ defmodule Mobius do
   timestamp lives one level up on the snapshot itself, so the inner tuple only
   carries identity (`name`, `tags`), `type`, and `value`.
   """
-  @type record() :: {metric_name(), metric_type(), term(), map()}
+  @type metric_record() :: {metric_name(), metric_type(), term(), map()}
 
   @type timestamp() :: integer()
 

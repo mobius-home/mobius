@@ -36,7 +36,7 @@ defmodule Mobius.Scraper do
   `{name, type, value, tags}` tuple. Callers that need the public
   `t:Mobius.metric/0` map shape should pipe through `to_metric/1`.
   """
-  @spec all(Mobius.instance(), [all_opt()]) :: [{Mobius.timestamp(), Mobius.record()}]
+  @spec all(Mobius.instance(), [all_opt()]) :: [{Mobius.timestamp(), Mobius.metric_record()}]
   def all(instance, opts \\ []) do
     GenServer.call(name(instance), {:get, opts})
   end
@@ -102,7 +102,7 @@ defmodule Mobius.Scraper do
   @doc """
   Materialize a packed record (and its timestamp) into a `Mobius.metric/0` map
   """
-  @spec to_metric({Mobius.timestamp(), Mobius.record()}) :: Mobius.metric()
+  @spec to_metric({Mobius.timestamp(), Mobius.metric_record()}) :: Mobius.metric()
   def to_metric({ts, {name, type, value, tags}}) do
     %{timestamp: ts, name: name, type: type, value: value, tags: tags}
   end

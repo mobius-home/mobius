@@ -100,7 +100,7 @@ defmodule Mobius.RRD do
   @doc """
   Insert an item for the specified time
   """
-  @spec insert(t(), integer(), [Mobius.record()]) :: t()
+  @spec insert(t(), integer(), [Mobius.metric_record()]) :: t()
   def insert(rrd, ts, item) do
     value = {ts, item}
 
@@ -248,7 +248,7 @@ defmodule Mobius.RRD do
   @doc """
   Return all items in order
   """
-  @spec all(t()) :: [{Mobius.timestamp(), [Mobius.record()]}]
+  @spec all(t()) :: [{Mobius.timestamp(), [Mobius.metric_record()]}]
   def all(rrd) do
     result =
       CircularBuffer.to_list(rrd.day) ++
