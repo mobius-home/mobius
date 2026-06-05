@@ -4,7 +4,9 @@
 
 ![Mobius](assets/mobius-name.png)
 
-Library for localized telemetry metrics
+Library for local telemetry metrics and on-device insights.
+
+Mobius can scrape irregularly, downsample aggressively, persist occasionally and the only thing degraded is resolution, never correctness of totals.
 
 ## Installation
 
