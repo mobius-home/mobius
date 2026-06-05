@@ -3,7 +3,7 @@ defmodule Mobius.Scraper do
 
   use GenServer
 
-  alias Mobius.{MetricsTable, RRD}
+  alias Mobius.{Events, MetricsTable, RRD}
 
   require Logger
 
@@ -61,9 +61,13 @@ defmodule Mobius.Scraper do
   end
 
   defp state_from_args(args) do
+    # The resolved sketch configurations ride along with the persisted RRD
+    # data so load can detect — and drop — histogram data recorded under a
+    # different configuration (bin indices are meaningless under another
+    # relative_accuracy).
     args
     |> Keyword.take([:mobius_instance, :persistence_dir])
-    |> Enum.into(%{})
+    |> Enum.into(%{histogram_configs: Events.histogram_configs(args[:metrics] || [])})
   end
 
   defp make_database(state, args) do
@@ -76,7 +80,8 @@ defmodule Mobius.Scraper do
 
   defp load_data(database, state) do
     with {:ok, contents} <- File.read(file(state)),
-         {:ok, rrd} <- RRD.load(database, contents) do
+         {:ok, rrd} <-
+           RRD.load(database, contents, histogram_configs: state.histogram_configs) do
       rrd
     else
       {:error, :enoent} ->
@@ -94,27 +99,27 @@ defmodule Mobius.Scraper do
   end
 
   @typedoc """
-  Compact per-snapshot histogram payload.
+  Compact per-scrape histogram payload.
 
-  Outer map keyed by `{metric_name, tags}`. Each entry is a 3-tuple of
-  positive bins (`%{idx => count}`), negative bins, and the zero-bucket
-  count. Mirrors the field shape of `t:Mobius.DDSketch.t/0` so the query
-  path reconstructs a sketch with one struct update.
+  Outer map keyed by `{metric_name, tags}`. Each entry is one
+  `:erlang.term_to_binary/1`-encoded `t:Mobius.DDSketch.snapshot/0` tuple
+  (positive bins, negative bins, zero-bucket count). Keeping the payload
+  encoded at rest makes the retained scrapes roughly an order of
+  magnitude smaller than bin maps and keeps them off the owning process
+  heap; `Mobius.DDSketch.from_snapshot/2` decodes it at query time.
   """
-  @type histograms_sidecar() :: %{
-          {Mobius.metric_name(), map()} =>
-            {%{integer() => pos_integer()}, %{integer() => pos_integer()}, non_neg_integer()}
+  @type histograms() :: %{
+          {Mobius.metric_name(), map()} => binary()
         }
 
   @doc """
-  Get the per-snapshot histogram sidecars in the requested time range.
+  Get the per-scrape histogram payloads in the requested time range.
 
-  Returns a list of `{ts, sidecar}` tuples sorted by timestamp. Empty
-  sidecars (snapshots that captured no histogram bins) are still
-  returned with a `%{}` payload so callers can position window
-  boundaries.
+  Returns a list of `{ts, histograms}` tuples sorted by timestamp.
+  Scrapes that captured no histogram bins are still returned with a
+  `%{}` payload so callers can position window boundaries.
   """
-  @spec all_histograms(Mobius.instance(), [all_opt()]) :: [{integer(), histograms_sidecar()}]
+  @spec all_histograms(Mobius.instance(), [all_opt()]) :: [{integer(), histograms()}]
   def all_histograms(instance, opts \\ []) do
     GenServer.call(name(instance), {:get_histograms, opts})
   end
@@ -190,23 +195,26 @@ defmodule Mobius.Scraper do
   end
 
   # Split incoming entries into the regular records list and the compact
-  # per-metric histogram sidecar. See histograms_sidecar/0.
+  # per-metric histogram payload map. See histograms/0.
   defp build_snapshot(entries) do
-    Enum.reduce(entries, {[], %{}}, fn entry, {records, hists} ->
-      case entry do
-        {name, {:hist, :pos, idx}, value, tags} ->
-          {records, put_hist_bin(hists, {name, tags}, :positive, idx, value)}
+    {records, hists} =
+      Enum.reduce(entries, {[], %{}}, fn entry, {records, hists} ->
+        case entry do
+          {name, {:hist, :pos, idx}, value, tags} ->
+            {records, put_hist_bin(hists, {name, tags}, :positive, idx, value)}
 
-        {name, {:hist, :neg, idx}, value, tags} ->
-          {records, put_hist_bin(hists, {name, tags}, :negative, idx, value)}
+          {name, {:hist, :neg, idx}, value, tags} ->
+            {records, put_hist_bin(hists, {name, tags}, :negative, idx, value)}
 
-        {name, {:hist, :zero}, value, tags} ->
-          {records, put_zero(hists, {name, tags}, value)}
+          {name, {:hist, :zero}, value, tags} ->
+            {records, put_zero(hists, {name, tags}, value)}
 
-        {_name, _type, _value, _tags} = record ->
-          {[record | records], hists}
-      end
-    end)
+          {_name, _type, _value, _tags} = record ->
+            {[record | records], hists}
+        end
+      end)
+
+    {records, Map.new(hists, fn {key, snapshot} -> {key, :erlang.term_to_binary(snapshot)} end)}
   end
 
   defp put_hist_bin(hists, key, region, idx, value) do
@@ -230,7 +238,7 @@ defmodule Mobius.Scraper do
 
   # Write our database to persistent storage
   defp save_to_persistence(state) do
-    contents = RRD.save(state.database)
+    contents = RRD.save(state.database, histogram_configs: state.histogram_configs)
 
     case File.write(file(state), contents) do
       :ok ->

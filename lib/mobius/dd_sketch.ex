@@ -443,22 +443,34 @@ defmodule Mobius.DDSketch do
   end
 
   @typedoc """
-  The Mobius RRD snapshot sidecar shape for one `{metric_name, tags}`.
-  Tuple of `{positive_bins, negative_bins, zero_count}`.
+  Point-in-time capture of one sketch's bin state: a tuple of
+  `{positive_bins, negative_bins, zero_count}`.
+
+  This is the per-metric histogram payload stored in each Mobius RRD
+  scrape. At rest it is encoded with `:erlang.term_to_binary/1` — one
+  opaque binary per metric series — so the retained snapshots stay
+  compact and off the owning process heap.
   """
-  @type sidecar() ::
+  @type snapshot() ::
           {%{integer() => pos_integer()}, %{integer() => pos_integer()}, non_neg_integer()}
 
   @doc """
-  Reconstruct a sketch directly from a Mobius RRD sidecar tuple.
+  Reconstruct a sketch directly from a stored snapshot.
 
-  This is the cheap path used by window queries: the sidecar already
+  Accepts either the raw `t:snapshot/0` tuple or its
+  `:erlang.term_to_binary/1` encoding (the at-rest form).
+
+  This is the cheap path used by window queries: the snapshot already
   mirrors the sketch's internal bin layout, so a single struct update
   produces the sketch — no per-bin work. `opts` must match the original
   sketch's configuration (most importantly `:relative_accuracy`).
   """
-  @spec from_sidecar(keyword(), sidecar()) :: t()
-  def from_sidecar(opts, {positive_bins, negative_bins, zero_count})
+  @spec from_snapshot(keyword(), snapshot() | binary()) :: t()
+  def from_snapshot(opts, binary) when is_binary(binary) do
+    from_snapshot(opts, :erlang.binary_to_term(binary))
+  end
+
+  def from_snapshot(opts, {positive_bins, negative_bins, zero_count})
       when is_map(positive_bins) and is_map(negative_bins) and is_integer(zero_count) do
     %{
       new(opts)

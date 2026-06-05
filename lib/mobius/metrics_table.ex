@@ -14,8 +14,14 @@ defmodule Mobius.MetricsTable do
 
   require Logger
 
-  alias Mobius.Summary
+  alias Mobius.{Events, Summary}
   alias Telemetry.Metrics
+
+  # Meta row carrying the resolved sketch configuration the histogram bin
+  # counters were recorded under. Metric rows are keyed by a 3-tuple, so
+  # this atom key is invisible to the get_entries match specs and rides
+  # along in the tab2file dump for free.
+  @histogram_configs_key :__histogram_configs__
 
   @doc """
   Initialize the metrics table
@@ -23,19 +29,70 @@ defmodule Mobius.MetricsTable do
   @spec init([Mobius.arg()]) :: Mobius.instance()
   def init(args) do
     table_name = args[:mobius_instance]
+    configs = Events.histogram_configs(args[:metrics] || [])
 
-    case read_table_from_file(args) do
-      {:ok, table} ->
-        table
+    table =
+      case read_table_from_file(args) do
+        {:ok, table} ->
+          reconcile_histogram_bins(table, configs)
+          table
 
-      {:error, :enoent} ->
-        # Metrics save file doesn't (yet) exist
-        :ets.new(table_name, [:named_table, :public, :set])
+        {:error, :enoent} ->
+          # Metrics save file doesn't (yet) exist
+          :ets.new(table_name, [:named_table, :public, :set])
 
-      {:error, reason} ->
-        Logger.warning("[Mobius] Could not recover metrics from file because #{inspect(reason)}")
-        :ets.new(table_name, [:named_table, :public, :set])
+        {:error, reason} ->
+          Logger.warning(
+            "[Mobius] Could not recover metrics from file because #{inspect(reason)}"
+          )
+
+          :ets.new(table_name, [:named_table, :public, :set])
+      end
+
+    :ets.insert(table, {@histogram_configs_key, configs})
+    table
+  end
+
+  # Drop restored histogram bin rows whose sketch configuration no longer
+  # matches the one they were recorded under — bin indices are meaningless
+  # under a different configuration, and leaving them in place would mix
+  # two index spaces in the same cumulative counters. Restored dumps that
+  # predate the config meta row are treated as unverifiable and dropped.
+  defp reconcile_histogram_bins(table, current_configs) do
+    persisted_configs =
+      case :ets.lookup(table, @histogram_configs_key) do
+        [{@histogram_configs_key, configs}] -> configs
+        [] -> %{}
+      end
+
+    keys = :ets.select(table, [{{{:"$1", :"$2", :"$3"}, :_}, [], [{{:"$1", :"$2", :"$3"}}]}])
+
+    dropped =
+      Enum.reduce(keys, MapSet.new(), fn
+        {name, type, meta} = key, dropped when elem(type, 0) == :hist ->
+          config_key = {Enum.join(name, "."), meta |> Map.keys() |> Enum.sort()}
+          current = Map.get(current_configs, config_key)
+
+          if current != nil and Map.get(persisted_configs, config_key) == current do
+            dropped
+          else
+            :ets.delete(table, key)
+            MapSet.put(dropped, config_key)
+          end
+
+        _key, dropped ->
+          dropped
+      end)
+
+    if MapSet.size(dropped) > 0 do
+      Logger.warning(
+        "[Mobius] Dropping restored histogram bin counters for " <>
+          "#{inspect(MapSet.to_list(dropped))}: sketch configuration changed or " <>
+          "histograms no longer enabled for the metric"
+      )
     end
+
+    :ok
   end
 
   defp read_table_from_file(args) do

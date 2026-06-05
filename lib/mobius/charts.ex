@@ -198,7 +198,8 @@ defmodule Mobius.Charts do
     # A single histogram query both validates the metric (returning the nice
     # structured error if it is not histogram-enabled) and hands us a sketch
     # whose configuration we reuse to reconstruct every window's sketch.
-    with {:ok, probe} <- Exports.histogram(metric_name, tags, Keyword.merge(opts, from: from, to: to)) do
+    with {:ok, probe} <-
+           Exports.histogram(metric_name, tags, Keyword.merge(opts, from: from, to: to)) do
       sketch_opts = sketch_opts(probe)
       key = {metric_name, tags}
 
@@ -357,14 +358,15 @@ defmodule Mobius.Charts do
 
   # Reconstruct one window sketch per stored snapshot interval. Each consecutive
   # pair of snapshots that carries this metric is a window; its distribution is
-  # the bin-by-bin delta of the two cumulative sidecars. Only windows whose end
-  # falls inside [from, to] are emitted. Returns `{end_ts, sketch}` ascending.
+  # the bin-by-bin delta of the two cumulative sketch snapshots. Only windows
+  # whose end falls inside [from, to] are emitted. Returns `{end_ts, sketch}`
+  # ascending.
   defp window_sketches(instance, key, sketch_opts, from, to) do
     instance
     |> Scraper.all_histograms()
     |> Enum.flat_map(fn {ts, histograms} ->
       case Map.fetch(histograms, key) do
-        {:ok, sidecar} -> [{ts, sidecar}]
+        {:ok, snapshot} -> [{ts, snapshot}]
         :error -> []
       end
     end)
@@ -374,8 +376,8 @@ defmodule Mobius.Charts do
       [{_t0, earlier}, {t1, later}] when t1 >= from ->
         sketch =
           DDSketch.delta(
-            DDSketch.from_sidecar(sketch_opts, later),
-            DDSketch.from_sidecar(sketch_opts, earlier)
+            DDSketch.from_snapshot(sketch_opts, later),
+            DDSketch.from_snapshot(sketch_opts, earlier)
           )
 
         [{t1, sketch}]

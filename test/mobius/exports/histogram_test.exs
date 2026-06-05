@@ -207,6 +207,88 @@ defmodule Mobius.Exports.HistogramTest do
     assert DDSketch.total_count(sketch) == 1
   end
 
+  @tag :tmp_dir
+  test "histogram data survives a restart with unchanged config", %{tmp_dir: tmp_dir} do
+    instance = :mobius_histogram_restart_same
+
+    metrics = [
+      Telemetry.Metrics.summary("restart.same.duration",
+        measurement: :duration,
+        reporter_options: [histogram: [max_indexable_value: 1.0e9]]
+      )
+    ]
+
+    start_args = [mobius_instance: instance, persistence_dir: tmp_dir, metrics: metrics]
+    {:ok, _} = start_supervised({Mobius, start_args})
+
+    for n <- 1..50, do: :telemetry.execute([:restart, :same], %{duration: n * 1.0}, %{})
+    Process.sleep(@scrape_interval_ms)
+
+    {:ok, sketch} = Exports.histogram("restart.same.duration", %{}, mobius_instance: instance)
+    assert DDSketch.total_count(sketch) == 50
+
+    # Shut down (persists RRD and metrics table) and boot again unchanged.
+    :ok = stop_supervised(Mobius)
+    {:ok, _} = start_supervised({Mobius, start_args})
+    Process.sleep(@scrape_interval_ms)
+
+    {:ok, sketch} = Exports.histogram("restart.same.duration", %{}, mobius_instance: instance)
+    assert DDSketch.total_count(sketch) == 50
+  end
+
+  @tag :tmp_dir
+  @tag capture_log: true
+  test "histogram data is dropped when relative_accuracy changes across restart", %{
+    tmp_dir: tmp_dir
+  } do
+    instance = :mobius_histogram_restart_changed
+
+    metrics_for = fn histogram_opts ->
+      [
+        Telemetry.Metrics.summary("restart.changed.duration",
+          measurement: :duration,
+          reporter_options: [histogram: histogram_opts]
+        )
+      ]
+    end
+
+    {:ok, _} =
+      start_supervised(
+        {Mobius,
+         mobius_instance: instance,
+         persistence_dir: tmp_dir,
+         metrics: metrics_for.(max_indexable_value: 1.0e9)}
+      )
+
+    for n <- 1..50, do: :telemetry.execute([:restart, :changed], %{duration: n * 1.0}, %{})
+    Process.sleep(@scrape_interval_ms)
+
+    {:ok, sketch} = Exports.histogram("restart.changed.duration", %{}, mobius_instance: instance)
+    assert DDSketch.total_count(sketch) == 50
+
+    # Restart with a different relative accuracy: the persisted bin indices
+    # are meaningless under the new gamma, so both the RRD snapshots and the
+    # restored live counters must be dropped.
+    :ok = stop_supervised(Mobius)
+
+    {:ok, _} =
+      start_supervised(
+        {Mobius,
+         mobius_instance: instance,
+         persistence_dir: tmp_dir,
+         metrics: metrics_for.(max_indexable_value: 1.0e9, relative_accuracy: 0.05)}
+      )
+
+    for n <- 1..7, do: :telemetry.execute([:restart, :changed], %{duration: n * 1.0}, %{})
+    Process.sleep(@scrape_interval_ms)
+
+    {:ok, sketch} = Exports.histogram("restart.changed.duration", %{}, mobius_instance: instance)
+
+    # Only the post-restart observations remain — not 57.
+    assert DDSketch.total_count(sketch) == 7
+    assert sketch.relative_accuracy == 0.05
+  end
+
   defp assert_in_relative(actual, expected, tol) do
     err = abs(actual - expected) / abs(expected)
 

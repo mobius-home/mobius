@@ -145,38 +145,38 @@ defmodule Mobius.Exports.Histogram do
   defp last_seconds(n) when is_integer(n), do: n
 
   defp build_window_sketch(snapshots, metric_name, tags, sketch_opts, from, to) do
-    # Snapshots is a sorted list of {ts, %{{name, tags} => sidecar}}.
-    # Find the bin sidecar for this metric at each window endpoint.
+    # Snapshots is a sorted list of {ts, %{{name, tags} => sketch_snapshot}}.
+    # Find the sketch snapshot for this metric at each window endpoint.
     key = {metric_name, tags}
 
-    earlier = sidecar_at_or_before(snapshots, key, from - 1)
-    later = sidecar_at_or_before(snapshots, key, to)
+    earlier = snapshot_at_or_before(snapshots, key, from - 1)
+    later = snapshot_at_or_before(snapshots, key, to)
 
     case later do
       nil ->
         DDSketch.new(sketch_opts)
 
-      later_sidecar ->
-        later_sketch = DDSketch.from_sidecar(sketch_opts, later_sidecar)
+      later_snapshot ->
+        later_sketch = DDSketch.from_snapshot(sketch_opts, later_snapshot)
 
         earlier_sketch =
           case earlier do
             nil -> DDSketch.new(sketch_opts)
-            sidecar -> DDSketch.from_sidecar(sketch_opts, sidecar)
+            snapshot -> DDSketch.from_snapshot(sketch_opts, snapshot)
           end
 
         DDSketch.delta(later_sketch, earlier_sketch)
     end
   end
 
-  # Walk snapshots ascending; return the sidecar from the latest snapshot
+  # Walk scrapes ascending; return the sketch snapshot from the latest scrape
   # whose timestamp is ≤ ts AND that contained this metric, or nil.
-  defp sidecar_at_or_before(snapshots, key, ts) do
+  defp snapshot_at_or_before(snapshots, key, ts) do
     snapshots
     |> Enum.take_while(fn {snap_ts, _} -> snap_ts <= ts end)
     |> Enum.reduce(nil, fn {_snap_ts, histograms}, acc ->
       case Map.fetch(histograms, key) do
-        {:ok, sidecar} -> sidecar
+        {:ok, snapshot} -> snapshot
         :error -> acc
       end
     end)
