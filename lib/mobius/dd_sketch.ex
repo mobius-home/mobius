@@ -484,22 +484,28 @@ defmodule Mobius.DDSketch do
   Compute the bin-by-bin difference `later - earlier`.
 
   Used to materialise a window sketch from two RRD snapshots. Both
-  sketches must share the same `:relative_accuracy`. Bins that net to
-  zero drop out. A negative per-bin delta raises — counters are
-  cumulative, so this can only mean the two snapshots aren't from the
-  same series.
+  sketches must share the same `:relative_accuracy` (mismatched
+  accuracies raise — that is a caller bug). Bins that net to zero drop
+  out.
+
+  Returns `{:ok, sketch}`, or `{:error, :reset}` when any per-bin delta
+  is negative. Counters are cumulative and monotonically nondecreasing
+  within a series, so a negative delta means the accumulator was reset
+  between the two snapshots — e.g. the live counters were lost in a
+  reboot while the snapshot history survived. Callers decide how to
+  degrade: skip the interval, or fall back to `later` alone (everything
+  observed since the reset).
   """
-  @spec delta(t(), t()) :: t()
+  @spec delta(t(), t()) :: {:ok, t()} | {:error, :reset}
   def delta(
         %__MODULE__{relative_accuracy: a} = later,
         %__MODULE__{relative_accuracy: a} = earlier
       ) do
-    %{
-      later
-      | zero_count: subtract!(later.zero_count, earlier.zero_count, :zero),
-        positive_bins: bin_map_delta(later.positive_bins, earlier.positive_bins, :pos),
-        negative_bins: bin_map_delta(later.negative_bins, earlier.negative_bins, :neg)
-    }
+    with {:ok, zero} <- subtract(later.zero_count, earlier.zero_count),
+         {:ok, pos} <- bin_map_delta(later.positive_bins, earlier.positive_bins),
+         {:ok, neg} <- bin_map_delta(later.negative_bins, earlier.negative_bins) do
+      {:ok, %{later | zero_count: zero, positive_bins: pos, negative_bins: neg}}
+    end
   end
 
   def delta(%__MODULE__{} = a, %__MODULE__{} = b) do
@@ -508,22 +514,20 @@ defmodule Mobius.DDSketch do
             "(#{a.relative_accuracy} vs #{b.relative_accuracy})"
   end
 
-  defp bin_map_delta(later, earlier, region) do
+  defp bin_map_delta(later, earlier) do
     keys = MapSet.union(MapSet.new(Map.keys(later)), MapSet.new(Map.keys(earlier)))
 
-    Enum.reduce(keys, %{}, fn idx, acc ->
-      diff = subtract!(Map.get(later, idx, 0), Map.get(earlier, idx, 0), {region, idx})
-      if diff == 0, do: acc, else: Map.put(acc, idx, diff)
+    Enum.reduce_while(keys, {:ok, %{}}, fn idx, {:ok, acc} ->
+      case subtract(Map.get(later, idx, 0), Map.get(earlier, idx, 0)) do
+        {:ok, 0} -> {:cont, {:ok, acc}}
+        {:ok, diff} -> {:cont, {:ok, Map.put(acc, idx, diff)}}
+        {:error, :reset} -> {:halt, {:error, :reset}}
+      end
     end)
   end
 
-  defp subtract!(later, earlier, _region) when later >= earlier, do: later - earlier
-
-  defp subtract!(later, earlier, region) do
-    raise ArgumentError,
-          "negative bin delta at #{inspect(region)}: later=#{later} earlier=#{earlier}. " <>
-            "Counters must be monotonically nondecreasing within a series."
-  end
+  defp subtract(later, earlier) when later >= earlier, do: {:ok, later - earlier}
+  defp subtract(_later, _earlier), do: {:error, :reset}
 
   # Walk the bin set in ascending value order and emit
   # {value_estimator, count} pairs.

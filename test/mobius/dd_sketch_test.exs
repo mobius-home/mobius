@@ -414,7 +414,7 @@ defmodule Mobius.DDSketchTest do
       later =
         Enum.reduce(101..300, earlier, fn n, acc -> DDSketch.insert(acc, n) end)
 
-      window = DDSketch.delta(later, earlier)
+      assert {:ok, window} = DDSketch.delta(later, earlier)
       assert DDSketch.total_count(window) == 200
 
       # The window contents are 101..300 — quantile bounds should match.
@@ -424,21 +424,29 @@ defmodule Mobius.DDSketchTest do
 
     test "delta of identical sketches is empty" do
       s = Enum.reduce(1..50, sketch(), fn n, acc -> DDSketch.insert(acc, n) end)
-      assert DDSketch.empty?(DDSketch.delta(s, s))
+      assert {:ok, window} = DDSketch.delta(s, s)
+      assert DDSketch.empty?(window)
     end
 
     test "delta against an empty earlier returns later" do
       later = Enum.reduce(1..10, sketch(), fn n, acc -> DDSketch.insert(acc, n) end)
       empty = sketch()
-      window = DDSketch.delta(later, empty)
+      assert {:ok, window} = DDSketch.delta(later, empty)
       assert DDSketch.total_count(window) == DDSketch.total_count(later)
     end
 
-    test "negative-delta detection raises" do
+    test "a negative bin delta reports a counter reset" do
       earlier = sketch() |> DDSketch.insert(1.0) |> DDSketch.insert(1.0)
       later = sketch() |> DDSketch.insert(1.0)
 
-      assert_raise ArgumentError, fn -> DDSketch.delta(later, earlier) end
+      assert {:error, :reset} = DDSketch.delta(later, earlier)
+    end
+
+    test "a reset is detected even when only the zero bucket went backwards" do
+      earlier = sketch() |> DDSketch.insert(0.0) |> DDSketch.insert(0.0)
+      later = sketch() |> DDSketch.insert(0.0)
+
+      assert {:error, :reset} = DDSketch.delta(later, earlier)
     end
 
     test "rejects mismatched accuracies" do

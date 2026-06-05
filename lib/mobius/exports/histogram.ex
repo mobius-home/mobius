@@ -27,6 +27,11 @@ defmodule Mobius.Exports.Histogram do
 
   An empty sketch is returned when no histogram observations fell into the
   window (or no snapshots covered it).
+
+  If the cumulative counters reset inside the window (e.g. a reboot wiped
+  the live counters while the snapshot history survived), the pre-reset
+  baseline is unusable and the result degrades to everything observed
+  since the reset.
   """
   @spec histogram(Mobius.metric_name(), map(), [opt()]) ::
           {:ok, DDSketch.t()} | {:error, term()}
@@ -165,7 +170,19 @@ defmodule Mobius.Exports.Histogram do
             snapshot -> DDSketch.from_snapshot(sketch_opts, snapshot)
           end
 
-        DDSketch.delta(later_sketch, earlier_sketch)
+        case DDSketch.delta(later_sketch, earlier_sketch) do
+          {:ok, sketch} ->
+            sketch
+
+          {:error, :reset} ->
+            # The cumulative counters reset between the two boundary
+            # snapshots (e.g. a reboot wiped the live counters while the
+            # snapshot history survived), so the pre-window baseline is
+            # unusable. The later snapshot alone — everything observed
+            # since the reset — is the best available approximation of
+            # the window.
+            later_sketch
+        end
     end
   end
 
