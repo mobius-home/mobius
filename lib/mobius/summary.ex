@@ -4,7 +4,7 @@ defmodule Mobius.Summary do
   @typedoc """
   Calculated summary statistics
   """
-  @type t() :: %{average: float(), std_dev: float()}
+  @type t() :: %{average: float(), std_dev: float(), reports: non_neg_integer()}
 
   @typedoc """
   A data type to store snapshot information about a summary in order
@@ -48,15 +48,19 @@ defmodule Mobius.Summary do
     %{
       average: summary_data.accumulated / summary_data.reports,
       std_dev:
-        std_dev(summary_data.accumulated, summary_data.accumulated_sqrd, summary_data.reports)
+        std_dev(summary_data.accumulated, summary_data.accumulated_sqrd, summary_data.reports),
+      reports: summary_data.reports
     }
   end
 
   defp std_dev(_sum, _sum_sqrd, 1), do: 0
 
-  # Naive algorithm. See Wikipedia
+  # Naive algorithm. See Wikipedia. Clamp the operand at 0 before sqrt: the
+  # naive sum-of-squares variance can lose precision and go slightly negative
+  # via catastrophic cancellation when float values flow through, which would
+  # make :math.sqrt/1 raise. See FLEET_HEALTH.md.
   defp std_dev(sum, sum_sqrd, n) do
-    ((sum_sqrd - sum * sum / n) / (n - 1))
+    max(0, (sum_sqrd - sum * sum / n) / (n - 1))
     |> :math.sqrt()
   end
 end
