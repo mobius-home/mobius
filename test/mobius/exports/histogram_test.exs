@@ -289,6 +289,54 @@ defmodule Mobius.Exports.HistogramTest do
     assert sketch.relative_accuracy == 0.05
   end
 
+  @tag :tmp_dir
+  @tag capture_log: true
+  test "a counter reset inside the window degrades to since-reset counts", %{tmp_dir: tmp_dir} do
+    instance = :mobius_histogram_reset
+
+    metrics = [
+      Telemetry.Metrics.summary("reset.case.duration",
+        measurement: :duration,
+        reporter_options: [histogram: [max_indexable_value: 1.0e9]]
+      )
+    ]
+
+    start_args = [mobius_instance: instance, persistence_dir: tmp_dir, metrics: metrics]
+    {:ok, _} = start_supervised({Mobius, start_args})
+
+    for n <- 1..50, do: :telemetry.execute([:reset, :case], %{duration: n * 1.0}, %{})
+
+    # Capture a pre-reset snapshot with a timestamp strictly before
+    # window_start (whole-second resolution).
+    Process.sleep(@scrape_interval_ms * 2)
+    window_start = System.system_time(:second)
+
+    # A reboot that loses the live counters while the snapshot history
+    # survives: the metrics_table dump is gone, the RRD history is not.
+    :ok = stop_supervised(Mobius)
+    File.rm!(Path.join([tmp_dir, to_string(instance), "metrics_table"]))
+    {:ok, _} = start_supervised({Mobius, start_args})
+
+    for n <- 1..7, do: :telemetry.execute([:reset, :case], %{duration: n * 1.0}, %{})
+    Process.sleep(@scrape_interval_ms * 2)
+    window_end = System.system_time(:second)
+
+    # The boundary snapshots straddle the reset: the baseline carries 50
+    # cumulative observations, the window end only the 7 since the reboot.
+    # The query degrades to everything observed since the reset instead of
+    # crashing on the negative bin delta.
+    assert {:ok, sketch} =
+             Exports.histogram(
+               "reset.case.duration",
+               %{},
+               mobius_instance: instance,
+               from: window_start,
+               to: window_end
+             )
+
+    assert DDSketch.total_count(sketch) == 7
+  end
+
   defp assert_in_relative(actual, expected, tol) do
     err = abs(actual - expected) / abs(expected)
 

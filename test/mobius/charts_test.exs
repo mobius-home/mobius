@@ -105,6 +105,52 @@ defmodule Mobius.ChartsTest do
   end
 
   @tag :tmp_dir
+  @tag capture_log: true
+  test "quantiles_over_time skips the interval across a counter reset", %{tmp_dir: tmp_dir} do
+    instance = :charts_qot_reset
+    metrics = [histogram_metric("reset.write.duration", :duration)]
+    start_args = [mobius_instance: instance, persistence_dir: tmp_dir, metrics: metrics]
+    {:ok, _} = start_supervised({Mobius, start_args})
+
+    for n <- 1..50, do: :telemetry.execute([:reset, :write], %{duration: n * 1.0}, %{})
+    Process.sleep(@scrape_interval_ms * 2)
+
+    # A reboot that loses the live counters while the snapshot history
+    # survives: the metrics_table dump is gone, the RRD history is not.
+    :ok = stop_supervised(Mobius)
+    File.rm!(Path.join([tmp_dir, to_string(instance), "metrics_table"]))
+    {:ok, _} = start_supervised({Mobius, start_args})
+
+    # Two post-reset batches so at least one clean post-reset interval
+    # lands between two stored snapshots.
+    for n <- 100..109, do: :telemetry.execute([:reset, :write], %{duration: n * 1.0}, %{})
+    Process.sleep(@scrape_interval_ms * 2)
+    for n <- 110..119, do: :telemetry.execute([:reset, :write], %{duration: n * 1.0}, %{})
+    Process.sleep(@scrape_interval_ms * 2)
+
+    # The pair straddling the reset is skipped rather than crashing the
+    # whole query; clean intervals still produce points.
+    assert {:ok, qot} =
+             Charts.quantiles_over_time(
+               "reset.write.duration",
+               [0.5],
+               %{},
+               mobius_instance: instance,
+               last: {1, :hour}
+             )
+
+    assert [%{quantile: 0.5, points: points}] = qot.lines
+    assert points != []
+
+    # Every surviving point comes from a clean interval — values reflect
+    # real observations, never artifacts of the reset.
+    for point <- points do
+      assert point.value >= 1.0
+      assert point.value <= 120.0
+    end
+  end
+
+  @tag :tmp_dir
   test "quantiles_over_time surfaces the missing-metric error", %{tmp_dir: tmp_dir} do
     instance = :charts_qot_missing
     start_instance(instance, tmp_dir, [])

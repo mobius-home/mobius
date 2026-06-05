@@ -359,8 +359,9 @@ defmodule Mobius.Charts do
   # Reconstruct one window sketch per stored snapshot interval. Each consecutive
   # pair of snapshots that carries this metric is a window; its distribution is
   # the bin-by-bin delta of the two cumulative sketch snapshots. Only windows
-  # whose end falls inside [from, to] are emitted. Returns `{end_ts, sketch}`
-  # ascending.
+  # whose end falls inside [from, to] are emitted. An interval across which the
+  # cumulative counters reset (e.g. after a reboot) is skipped, mirroring
+  # summary_windows/5. Returns `{end_ts, sketch}` ascending.
   defp window_sketches(instance, key, sketch_opts, from, to) do
     instance
     |> Scraper.all_histograms()
@@ -374,13 +375,13 @@ defmodule Mobius.Charts do
     |> Enum.chunk_every(2, 1, :discard)
     |> Enum.flat_map(fn
       [{_t0, earlier}, {t1, later}] when t1 >= from ->
-        sketch =
-          DDSketch.delta(
-            DDSketch.from_snapshot(sketch_opts, later),
-            DDSketch.from_snapshot(sketch_opts, earlier)
-          )
-
-        [{t1, sketch}]
+        case DDSketch.delta(
+               DDSketch.from_snapshot(sketch_opts, later),
+               DDSketch.from_snapshot(sketch_opts, earlier)
+             ) do
+          {:ok, sketch} -> [{t1, sketch}]
+          {:error, :reset} -> []
+        end
 
       _ ->
         []

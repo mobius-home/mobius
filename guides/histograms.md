@@ -193,6 +193,14 @@ keeps its row forever. Old snapshots roll off the history but the
 live bins never do. So a deployed metric drifts toward worst-case bin
 count over uptime. Plan with worst case.
 
+When the live counters are lost but the snapshot history survives
+(e.g. a reboot where the metrics-table dump didn't persist), windowed
+queries detect the reset from the backwards-moving counts and degrade
+gracefully: `Mobius.Exports.histogram/3` (and the quantile/count
+queries built on it) falls back to everything observed since the
+reset, and `Mobius.Charts.quantiles_over_time/4` skips the one
+interval that straddles the reset.
+
 Bin count is bounded by `ceil(log_γ(max/min)) ≈ (log value range) / α`.
 At default α=0.1 that's ~12 bins per decade:
 
