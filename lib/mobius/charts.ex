@@ -31,7 +31,7 @@ defmodule Mobius.Charts do
   back in the result so a caller can label axes without re-deriving it.
   """
 
-  alias Mobius.{DDSketch, Exports, Scraper, Summary}
+  alias Mobius.{Data, DDSketch, Exports, Scraper, Summary}
 
   @default_window_seconds 180
   @max_history_seconds 60 * 86_400
@@ -221,7 +221,10 @@ defmodule Mobius.Charts do
 
   Accepts any `t:Mobius.Exports.export_metric_type/0`. Use a plain type
   (`:last_value`, `:counter`, `:sum`) for a gauge or counter line, or
-  `{:summary, :average}` / `{:summary, :std_dev}` for a summary metric\n  (plain `:summary` gives the full per-interval `%{average:, std_dev:}` map).
+  `{:summary, :average}` / `{:summary, :std_dev}` / `{:summary, :reports}`
+  for a summary metric (plain `:summary` gives the full per-interval
+  `%{average:, std_dev:, reports:}` map, where `reports` is the subgroup
+  size n for that interval).
 
   Summary statistics are **per interval**: the stored summary is a cumulative
   accumulator (sum / sum-of-squares / count since the metric started), so each
@@ -241,7 +244,7 @@ defmodule Mobius.Charts do
 
     points =
       instance
-      |> summary_windows(metric_name, tags, from, to)
+      |> Data.summary_deltas(metric_name, tags, from, to)
       |> Enum.map(fn {ts, delta} -> %{timestamp: ts, value: Summary.calculate(delta)} end)
 
     %{
@@ -254,13 +257,13 @@ defmodule Mobius.Charts do
   end
 
   def series(metric_name, {:summary, field} = type, tags, opts)
-      when field in [:average, :std_dev] do
+      when field in [:average, :std_dev, :reports] do
     instance = opts[:mobius_instance] || :mobius
     {from, to} = resolve_window(opts)
 
     points =
       instance
-      |> summary_windows(metric_name, tags, from, to)
+      |> Data.summary_deltas(metric_name, tags, from, to)
       |> Enum.map(fn {ts, delta} ->
         %{timestamp: ts, value: Map.fetch!(Summary.calculate(delta), field)}
       end)
@@ -395,44 +398,6 @@ defmodule Mobius.Charts do
       max_indexable_value: sketch.max_indexable_value,
       on_overflow: sketch.on_overflow
     ]
-  end
-
-  # Per-interval summary deltas, mirroring window_sketches/5. A summary record is
-  # a cumulative accumulator (sum / sum² / report count since the metric started),
-  # so each consecutive pair of snapshots yields the statistics for just that
-  # interval by subtraction. Pairs with no new reports are skipped, and a negative
-  # report delta (the accumulator reset, e.g. after a reboot) is skipped too.
-  # Returns `{end_ts, Summary.data()}` ascending.
-  defp summary_windows(instance, metric_name, tags, from, to) do
-    instance
-    |> Scraper.all()
-    |> Enum.flat_map(fn
-      {ts, {^metric_name, :summary, data, rec_tags}} when rec_tags == tags -> [{ts, data}]
-      _ -> []
-    end)
-    |> Enum.filter(fn {ts, _data} -> to - ts <= @max_history_seconds and ts <= to end)
-    |> Enum.uniq_by(fn {ts, _data} -> ts end)
-    |> Enum.sort_by(fn {ts, _data} -> ts end)
-    |> Enum.chunk_every(2, 1, :discard)
-    |> Enum.flat_map(fn
-      [{_t0, earlier}, {t1, later}] when t1 >= from ->
-        reports = later.reports - earlier.reports
-
-        if reports > 0 do
-          delta = %{
-            accumulated: later.accumulated - earlier.accumulated,
-            accumulated_sqrd: later.accumulated_sqrd - earlier.accumulated_sqrd,
-            reports: reports
-          }
-
-          [{t1, delta}]
-        else
-          []
-        end
-
-      _pair ->
-        []
-    end)
   end
 
   defp normalize_ref({name, type}), do: {name, type, %{}}
