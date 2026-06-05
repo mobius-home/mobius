@@ -70,7 +70,7 @@ defmodule Mobius.RRDTest do
       assert RRD.load(RRD.new(@args), v2_binary) == {:ok, expected_rrd}
     end
 
-    test "version 3 (records and empty histograms sidecar)" do
+    test "version 3 (records and empty histograms)" do
       rrd =
         RRD.new(@args)
         |> RRD.insert(1234, {[{"vm.memory.total", :last_value, 123, %{}}], %{}})
@@ -80,18 +80,89 @@ defmodule Mobius.RRDTest do
       assert RRD.load(RRD.new(@args), rrd_binary) == {:ok, rrd}
     end
 
-    test "version 3 with populated histogram sidecar" do
-      sidecar = %{{"latency.ms", %{}} => {%{1 => 3, 2 => 17}, %{}, 0}}
+    test "version 3 round-trips records, encoded histograms, and configs" do
+      config = %{
+        relative_accuracy: 0.1,
+        min_indexable_value: 1.0e-9,
+        max_indexable_value: 1.0e18,
+        on_overflow: :clamp
+      }
+
+      configs = %{{"latency.ms", []} => config}
+      payload = :erlang.term_to_binary({%{1 => 3, 2 => 17}, %{}, 0})
 
       rrd =
         RRD.new(@args)
         |> RRD.insert(
           1234,
-          {[{"vm.memory.total", :last_value, 123, %{}}], sidecar}
+          {[{"vm.memory.total", :last_value, 123, %{}}], %{{"latency.ms", %{}} => payload}}
         )
 
-      rrd_binary = RRD.save(rrd) |> IO.iodata_to_binary()
+      rrd_binary = RRD.save(rrd, histogram_configs: configs) |> IO.iodata_to_binary()
+
+      assert RRD.load(RRD.new(@args), rrd_binary, histogram_configs: configs) == {:ok, rrd}
+    end
+
+    test "version 3 loads everything when no current configs are given" do
+      configs = %{{"latency.ms", []} => %{relative_accuracy: 0.1}}
+      payload = :erlang.term_to_binary({%{1 => 3}, %{}, 0})
+
+      rrd =
+        RRD.new(@args)
+        |> RRD.insert(1234, {[], %{{"latency.ms", %{}} => payload}})
+
+      rrd_binary = RRD.save(rrd, histogram_configs: configs) |> IO.iodata_to_binary()
+
       assert RRD.load(RRD.new(@args), rrd_binary) == {:ok, rrd}
+    end
+
+    @tag capture_log: true
+    test "version 3 drops histogram data on config mismatch, keeps records" do
+      saved_config = %{
+        relative_accuracy: 0.1,
+        min_indexable_value: 1.0e-9,
+        max_indexable_value: 1.0e18,
+        on_overflow: :clamp
+      }
+
+      current_config = %{saved_config | relative_accuracy: 0.05}
+
+      payload = :erlang.term_to_binary({%{1 => 3}, %{}, 0})
+
+      rrd =
+        RRD.new(@args)
+        |> RRD.insert(
+          1234,
+          {[{"vm.memory.total", :last_value, 123, %{}}], %{{"latency.ms", %{}} => payload}}
+        )
+
+      expected_rrd =
+        RRD.new(@args)
+        |> RRD.insert(1234, {[{"vm.memory.total", :last_value, 123, %{}}], %{}})
+
+      rrd_binary =
+        RRD.save(rrd, histogram_configs: %{{"latency.ms", []} => saved_config})
+        |> IO.iodata_to_binary()
+
+      assert RRD.load(RRD.new(@args), rrd_binary,
+               histogram_configs: %{{"latency.ms", []} => current_config}
+             ) == {:ok, expected_rrd}
+    end
+
+    @tag capture_log: true
+    test "version 3 drops histogram data when the metric is no longer histogram-enabled" do
+      configs = %{{"latency.ms", []} => %{relative_accuracy: 0.1}}
+      payload = :erlang.term_to_binary({%{1 => 3}, %{}, 0})
+
+      rrd =
+        RRD.new(@args)
+        |> RRD.insert(1234, {[], %{{"latency.ms", %{}} => payload}})
+
+      expected_rrd = RRD.new(@args) |> RRD.insert(1234, {[], %{}})
+
+      rrd_binary = RRD.save(rrd, histogram_configs: configs) |> IO.iodata_to_binary()
+
+      assert RRD.load(RRD.new(@args), rrd_binary, histogram_configs: %{}) == {:ok, expected_rrd}
     end
   end
 

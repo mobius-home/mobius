@@ -115,6 +115,39 @@ defmodule Mobius.Events do
     end
   end
 
+  @doc """
+  Resolved sketch configuration per histogram-enabled metric definition.
+
+  Keyed by `{metric_name, sorted_tag_keys}`. Resolving through
+  `Mobius.DDSketch.new/1` means `histogram: true` and an explicitly
+  spelled-out default configuration compare equal. Used by the
+  persistence paths (RRD file and metrics table dump) to detect — and
+  drop — histogram data recorded under a different configuration.
+  """
+  @spec histogram_configs([Telemetry.Metrics.t()]) ::
+          %{{Mobius.metric_name(), [atom()]} => map()}
+  def histogram_configs(metrics) do
+    Enum.reduce(metrics, %{}, fn metric, acc ->
+      case histogram_opts(metric) do
+        nil ->
+          acc
+
+        opts ->
+          key = {Enum.join(metric.name, "."), Enum.sort(metric.tags)}
+          Map.put(acc, key, sketch_config(Mobius.DDSketch.new(opts)))
+      end
+    end)
+  end
+
+  defp sketch_config(%Mobius.DDSketch{} = sketch) do
+    Map.take(sketch, [
+      :relative_accuracy,
+      :min_indexable_value,
+      :max_indexable_value,
+      :on_overflow
+    ])
+  end
+
   defp keep?(%{keep: nil}, _metadata), do: true
   defp keep?(metric, metadata), do: metric.keep.(metadata)
 

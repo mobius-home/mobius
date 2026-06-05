@@ -42,8 +42,12 @@ defmodule Mobius.Registry do
 
   @impl GenServer
   def init(args) do
-    registered = register_metrics(args)
-    _ = register_events(args)
+    # Trap exits so terminate/2 runs on shutdown and detaches our telemetry
+    # handlers — otherwise they survive this process and double-count events
+    # after a restart of the same instance.
+    Process.flag(:trap_exit, true)
+
+    registered = register_metrics(args) ++ register_events(args)
 
     {:ok,
      %{
@@ -51,6 +55,11 @@ defmodule Mobius.Registry do
        metrics: Keyword.fetch!(args, :metrics),
        table: args[:mobius_instance]
      }, {:continue, :update_metrics_table}}
+  end
+
+  @impl GenServer
+  def terminate(_reason, state) do
+    Enum.each(state.registered, &:telemetry.detach/1)
   end
 
   defp register_metrics(args) do

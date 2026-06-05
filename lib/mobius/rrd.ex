@@ -100,15 +100,16 @@ defmodule Mobius.RRD do
   @typedoc """
   Snapshot payload stored at each RRD timestamp.
 
-  A `{records, histograms_sidecar}` tuple where `records` is the list of
-  regular `t:Mobius.record/0` tuples and `histograms_sidecar` is the
-  compact per-metric histogram bin payload from `Mobius.Scraper`.
+  A `{records, histograms}` tuple where `records` is the list of regular
+  `t:Mobius.metric_record/0` tuples and `histograms` is the compact per-metric
+  histogram payload map from `Mobius.Scraper` (one
+  `:erlang.term_to_binary/1`-encoded sketch snapshot per metric series).
 
   Plain `[Mobius.metric_record()]` is also accepted for backwards compatibility
-  with older callers; it is treated as records with an empty sidecar.
+  with older callers; it is treated as records with no histogram data.
   """
   @type snapshot() ::
-          {[Mobius.metric_record()], Mobius.Scraper.histograms_sidecar()}
+          {[Mobius.metric_record()], Mobius.Scraper.histograms()}
           | [Mobius.metric_record()]
 
   @doc """
@@ -163,13 +164,33 @@ defmodule Mobius.RRD do
     (div(ts, res) + 1) * res
   end
 
+  @typedoc """
+  Identity of a histogram-enabled metric definition: name plus sorted tag keys.
+  """
+  @type histogram_config_key() :: {Mobius.metric_name(), [atom()]}
+
+  @typedoc """
+  Options for loading a persisted RRD
+
+  * `:histogram_configs` - the current resolved sketch configuration per
+    histogram-enabled metric. When given, v3 files are checked series by
+    series and persisted histogram data whose recorded configuration does
+    not match the current one is dropped — bin indices are meaningless
+    under a different configuration, so reinterpreting them would produce
+    silently wrong quantiles. When omitted, no compatibility check is
+    performed.
+  """
+  @type load_opt() :: {:histogram_configs, %{histogram_config_key() => map()}}
+
   @doc """
   Load persisted data back into a TimeLayerBuffer
 
   The `rrd` that's passed in is expected to be a new one without any entries.
   """
-  @spec load(t(), binary()) :: {:ok, t()} | {:error, Mobius.DataLoadError.t()}
-  def load(rrd, <<1, data::binary>>) do
+  @spec load(t(), binary(), [load_opt()]) :: {:ok, t()} | {:error, Mobius.DataLoadError.t()}
+  def load(rrd, binary, opts \\ [])
+
+  def load(rrd, <<1, data::binary>>, _opts) do
     data
     |> :erlang.binary_to_term()
     |> migrate_data(1)
@@ -179,7 +200,7 @@ defmodule Mobius.RRD do
     _, _ -> {:error, Mobius.DataLoadError.exception(reason: :corrupt, who: rrd)}
   end
 
-  def load(rrd, <<2, data::binary>>) do
+  def load(rrd, <<2, data::binary>>, _opts) do
     data
     |> :erlang.binary_to_term()
     |> migrate_data(2)
@@ -188,16 +209,54 @@ defmodule Mobius.RRD do
     _, _ -> {:error, Mobius.DataLoadError.exception(reason: :corrupt, who: rrd)}
   end
 
-  def load(rrd, <<@serialization_version, data::binary>>) do
-    data
-    |> :erlang.binary_to_term()
+  def load(rrd, <<@serialization_version, data::binary>>, opts) do
+    %{configs: persisted_configs, data: snapshots} = :erlang.binary_to_term(data)
+
+    snapshots
+    |> drop_incompatible_histograms(persisted_configs, opts[:histogram_configs])
     |> do_load(rrd)
   catch
     _, _ -> {:error, Mobius.DataLoadError.exception(reason: :corrupt, who: rrd)}
   end
 
-  def load(rrd, _) do
+  def load(rrd, _, _opts) do
     {:error, Mobius.DataLoadError.exception(reason: :unsupported_version, who: rrd)}
+  end
+
+  # No current configuration to check against: load everything as-is.
+  defp drop_incompatible_histograms(snapshots, _persisted_configs, nil), do: snapshots
+
+  defp drop_incompatible_histograms(snapshots, persisted_configs, current_configs) do
+    {snapshots, dropped} =
+      Enum.map_reduce(snapshots, MapSet.new(), fn
+        {ts, {records, histograms}}, dropped ->
+          {kept, dropped} =
+            Enum.reduce(histograms, {%{}, dropped}, fn {key, payload}, {kept, dropped} ->
+              {name, tags} = key
+              config_key = {name, tags |> Map.keys() |> Enum.sort()}
+              current = Map.get(current_configs, config_key)
+
+              if current != nil and Map.get(persisted_configs, config_key) == current do
+                {Map.put(kept, key, payload), dropped}
+              else
+                {kept, MapSet.put(dropped, config_key)}
+              end
+            end)
+
+          {{ts, {records, kept}}, dropped}
+
+        {ts, records}, dropped ->
+          {{ts, records}, dropped}
+      end)
+
+    if MapSet.size(dropped) > 0 do
+      Logger.warning(
+        "Dropping persisted histogram data for #{inspect(MapSet.to_list(dropped))}: " <>
+          "sketch configuration changed or histograms no longer enabled for the metric"
+      )
+    end
+
+    snapshots
   end
 
   defp do_load(data, rrd) when is_list(data) do
@@ -226,8 +285,8 @@ defmodule Mobius.RRD do
 
   # migrate data from version 2 to version 3: drop the redundant inner
   # `:timestamp` field, pack each record as a positional tuple, and wrap
-  # the records list in a `{records, histograms_sidecar}` snapshot tuple.
-  # v2 files never carried histogram data, so the sidecar is empty.
+  # the records list in a `{records, histograms}` snapshot tuple. v2
+  # files never carried histogram data, so the histograms map is empty.
   defp migrate_data(data, 2) do
     Enum.map(data, fn {timestamp, metrics} ->
       records =
@@ -248,8 +307,13 @@ defmodule Mobius.RRD do
 
   * `:serialization_version` - the version of serialization format, defaults to
     most recent
+  * `:histogram_configs` - the resolved sketch configuration per
+    histogram-enabled metric, recorded in v3 files so `load/3` can detect
+    histogram data produced under a different configuration
   """
-  @type save_opt() :: {:serialization_version, 1 | 2 | 3}
+  @type save_opt() ::
+          {:serialization_version, 1 | 2 | 3}
+          | {:histogram_configs, %{histogram_config_key() => map()}}
 
   @doc """
   Serialize to an iolist
@@ -258,7 +322,14 @@ defmodule Mobius.RRD do
   def save(rrd, opts \\ []) do
     serialization_version = opts[:serialization_version] || @serialization_version
 
-    [serialization_version, :erlang.term_to_iovec(all(rrd))]
+    payload =
+      if serialization_version >= 3 do
+        %{configs: opts[:histogram_configs] || %{}, data: all(rrd)}
+      else
+        all(rrd)
+      end
+
+    [serialization_version, :erlang.term_to_iovec(payload)]
   end
 
   @doc """
