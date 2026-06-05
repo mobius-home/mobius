@@ -352,6 +352,31 @@ defmodule Mobius.DDSketch do
     count_in_range(sketch, lo, hi, include_lo: true, include_hi: true)
   end
 
+  @doc """
+  The populated bins as `{representative_value, count}` pairs, ascending by value.
+
+  This is the same bin walk `quantile/1` uses, exposed so callers can read a
+  sketch's distribution without coupling to the internal bin-key format or the
+  `gamma` field.
+
+  Ordering is ascending by representative value. The representative value of a
+  positive bin of index `k` is the canonical DDSketch within-bin estimator
+  `2·gamma^k / (gamma + 1)`; the zero bucket reports `0.0`, and negative bins
+  are the mirrored negatives of their positive-index counterparts. Counts are
+  exact integers; the representative values carry the sketch's relative-accuracy
+  error (each is within `relative_accuracy` of every value in its bin).
+
+      iex> sketch = Mobius.DDSketch.new()
+      iex> sketch = Enum.reduce([10.0, 10.0, 1000.0], sketch, &Mobius.DDSketch.insert(&2, &1))
+      iex> [{v1, 2}, {_v2, 1}] = Mobius.DDSketch.bin_estimates(sketch)
+      iex> abs(v1 - 10.0) / 10.0 <= sketch.relative_accuracy
+      true
+  """
+  @spec bin_estimates(t()) :: [{float(), pos_integer()}]
+  def bin_estimates(%__MODULE__{} = sketch) do
+    ordered_entries(sketch)
+  end
+
   defp count_in_range(sketch, lo, hi, opts) do
     include_lo = Keyword.fetch!(opts, :include_lo)
     include_hi = Keyword.fetch!(opts, :include_hi)

@@ -3,6 +3,8 @@ defmodule Mobius.DDSketchTest do
 
   alias Mobius.DDSketch
 
+  doctest Mobius.DDSketch
+
   # Tests that don't care about the cap use the bare constructor (which
   # picks a default max). Tests that exercise the cap pass it explicitly.
   defp sketch(opts \\ []), do: DDSketch.new(opts)
@@ -567,6 +569,52 @@ defmodule Mobius.DDSketchTest do
         assert rel_err <= s.relative_accuracy + 1.0e-12,
                "estimator #{estimator} not within α of sample #{sample} (err: #{rel_err})"
       end
+    end
+  end
+
+  describe "bin_estimates/1" do
+    test "returns ordered {value, count} pairs spanning negative, zero and positive bins" do
+      s = sketch(relative_accuracy: 0.01)
+
+      values = [-50.0, -50.0, 0.0, 5.0, 5.0, 5.0, 200.0]
+      sketch = Enum.reduce(values, s, &DDSketch.insert(&2, &1))
+
+      entries = DDSketch.bin_estimates(sketch)
+
+      # Ascending by representative value.
+      assert entries == Enum.sort_by(entries, &elem(&1, 0))
+
+      vals = Enum.map(entries, &elem(&1, 0))
+      counts = Enum.map(entries, &elem(&1, 1))
+
+      # Counts are exact and total to the number of inserted observations.
+      assert Enum.sum(counts) == length(values)
+
+      # One entry per distinct magnitude region: -50, 0, 5, 200.
+      assert length(entries) == 4
+
+      # The zero bucket reports exactly 0.0.
+      assert {0.0, 1} in entries
+
+      # Negative bin mirrors its positive counterpart and stays within α.
+      {neg_value, neg_count} = Enum.find(entries, fn {v, _c} -> v < 0.0 end)
+      assert neg_count == 2
+      assert neg_value < 0.0
+      assert_relative_error(neg_value, -50.0, s.relative_accuracy)
+
+      # Positive bins carry exact counts and α-accurate representative values.
+      assert {five_value, 3} = Enum.find(entries, fn {v, _c} -> v > 0.0 and v < 100.0 end)
+      assert_relative_error(five_value, 5.0, s.relative_accuracy)
+
+      assert {big_value, 1} = Enum.find(entries, fn {v, _c} -> v > 100.0 end)
+      assert_relative_error(big_value, 200.0, s.relative_accuracy)
+
+      # Sanity: vals are strictly ascending and distinct.
+      assert vals == Enum.uniq(vals)
+    end
+
+    test "empty sketch yields no entries" do
+      assert DDSketch.bin_estimates(sketch()) == []
     end
   end
 
