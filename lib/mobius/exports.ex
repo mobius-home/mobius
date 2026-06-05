@@ -15,7 +15,7 @@ defmodule Mobius.Exports do
   """
 
   alias Mobius.Asciichart
-  alias Mobius.Exports.{CSV, Histogram, Metrics, MobiusBinaryFormat, UnsupportedMetricError}
+  alias Mobius.Exports.{CSV, Histogram, MobiusBinaryFormat, UnsupportedMetricError}
 
   @typedoc """
   Options to use when exporting time series metric data
@@ -142,7 +142,7 @@ defmodule Mobius.Exports do
   @spec metrics(Mobius.metric_name(), Mobius.metric_type(), map(), [export_opt()] | keyword()) ::
           [Mobius.metric()]
   def metrics(metric_name, type, tags, opts \\ []) do
-    Metrics.export(metric_name, type, tags, opts)
+    Mobius.Data.metrics(metric_name, type, tags, opts)
   end
 
   defp get_metrics(metric_name, type, tags, opts) do
