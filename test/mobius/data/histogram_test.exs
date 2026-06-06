@@ -1,7 +1,7 @@
-defmodule Mobius.Exports.HistogramTest do
+defmodule Mobius.Data.HistogramTest do
   use ExUnit.Case, async: false
 
-  alias Mobius.{DDSketch, Exports}
+  alias Mobius.{Data, DDSketch}
 
   @scrape_interval_ms 1_100
 
@@ -30,14 +30,12 @@ defmodule Mobius.Exports.HistogramTest do
     Process.sleep(@scrape_interval_ms)
 
     assert {:ok, sketch} =
-             Exports.histogram("http.request.duration", %{}, mobius_instance: instance)
+             Data.histogram("http.request.duration", %{}, mobius_instance: instance)
 
     assert DDSketch.total_count(sketch) == 100
 
     {:ok, %{0.5 => p50, 0.95 => p95, 0.99 => p99}} =
-      Exports.quantiles("http.request.duration", [0.5, 0.95, 0.99], %{},
-        mobius_instance: instance
-      )
+      Data.quantiles("http.request.duration", [0.5, 0.95, 0.99], %{}, mobius_instance: instance)
 
     # Within ~2α of the true quantile of the input sequence.
     alpha = sketch.relative_accuracy
@@ -82,7 +80,7 @@ defmodule Mobius.Exports.HistogramTest do
     window_end = System.system_time(:second)
 
     {:ok, window_sketch} =
-      Exports.histogram(
+      Data.histogram(
         "flash.write.duration",
         %{},
         mobius_instance: instance,
@@ -120,10 +118,10 @@ defmodule Mobius.Exports.HistogramTest do
     Process.sleep(@scrape_interval_ms)
 
     {:ok, fast} =
-      Exports.histogram_count_below("mqtt.publish.ms", 100, %{}, mobius_instance: instance)
+      Data.count_below("mqtt.publish.ms", 100, %{}, mobius_instance: instance)
 
     {:ok, slow} =
-      Exports.histogram_count_above("mqtt.publish.ms", 100, %{}, mobius_instance: instance)
+      Data.count_above("mqtt.publish.ms", 100, %{}, mobius_instance: instance)
 
     # The 100ms boundary may shift by up to α in bin terms; allow a small
     # tolerance.
@@ -140,7 +138,7 @@ defmodule Mobius.Exports.HistogramTest do
       start_supervised({Mobius, mobius_instance: instance, persistence_dir: tmp_dir, metrics: []})
 
     assert {:error, {:no_histogram_metric, msg}} =
-             Exports.histogram("does.not.exist", %{}, mobius_instance: instance)
+             Data.histogram("does.not.exist", %{}, mobius_instance: instance)
 
     assert msg =~ "no histogram-enabled metric"
   end
@@ -159,7 +157,7 @@ defmodule Mobius.Exports.HistogramTest do
       )
 
     assert {:error, {:no_histogram_metric, _}} =
-             Exports.histogram("plain.summary", %{}, mobius_instance: instance)
+             Data.histogram("plain.summary", %{}, mobius_instance: instance)
   end
 
   @tag :tmp_dir
@@ -178,7 +176,7 @@ defmodule Mobius.Exports.HistogramTest do
         {Mobius, mobius_instance: instance, persistence_dir: tmp_dir, metrics: metrics}
       )
 
-    {:ok, sketch} = Exports.histogram("never.observed", %{}, mobius_instance: instance)
+    {:ok, sketch} = Data.histogram("never.observed", %{}, mobius_instance: instance)
     assert DDSketch.empty?(sketch)
     assert DDSketch.quantile(sketch, 0.5) == nil
   end
@@ -202,7 +200,7 @@ defmodule Mobius.Exports.HistogramTest do
     :telemetry.execute([:slow, :thing], %{v: 100.0}, %{})
     Process.sleep(@scrape_interval_ms)
 
-    {:ok, sketch} = Exports.histogram("slow.thing.v", %{}, mobius_instance: instance)
+    {:ok, sketch} = Data.histogram("slow.thing.v", %{}, mobius_instance: instance)
     assert sketch.relative_accuracy == 0.05
     assert DDSketch.total_count(sketch) == 1
   end
@@ -224,7 +222,7 @@ defmodule Mobius.Exports.HistogramTest do
     for n <- 1..50, do: :telemetry.execute([:restart, :same], %{duration: n * 1.0}, %{})
     Process.sleep(@scrape_interval_ms)
 
-    {:ok, sketch} = Exports.histogram("restart.same.duration", %{}, mobius_instance: instance)
+    {:ok, sketch} = Data.histogram("restart.same.duration", %{}, mobius_instance: instance)
     assert DDSketch.total_count(sketch) == 50
 
     # Shut down (persists RRD and metrics table) and boot again unchanged.
@@ -232,7 +230,7 @@ defmodule Mobius.Exports.HistogramTest do
     {:ok, _} = start_supervised({Mobius, start_args})
     Process.sleep(@scrape_interval_ms)
 
-    {:ok, sketch} = Exports.histogram("restart.same.duration", %{}, mobius_instance: instance)
+    {:ok, sketch} = Data.histogram("restart.same.duration", %{}, mobius_instance: instance)
     assert DDSketch.total_count(sketch) == 50
   end
 
@@ -263,7 +261,7 @@ defmodule Mobius.Exports.HistogramTest do
     for n <- 1..50, do: :telemetry.execute([:restart, :changed], %{duration: n * 1.0}, %{})
     Process.sleep(@scrape_interval_ms)
 
-    {:ok, sketch} = Exports.histogram("restart.changed.duration", %{}, mobius_instance: instance)
+    {:ok, sketch} = Data.histogram("restart.changed.duration", %{}, mobius_instance: instance)
     assert DDSketch.total_count(sketch) == 50
 
     # Restart with a different relative accuracy: the persisted bin indices
@@ -282,7 +280,7 @@ defmodule Mobius.Exports.HistogramTest do
     for n <- 1..7, do: :telemetry.execute([:restart, :changed], %{duration: n * 1.0}, %{})
     Process.sleep(@scrape_interval_ms)
 
-    {:ok, sketch} = Exports.histogram("restart.changed.duration", %{}, mobius_instance: instance)
+    {:ok, sketch} = Data.histogram("restart.changed.duration", %{}, mobius_instance: instance)
 
     # Only the post-restart observations remain — not 57.
     assert DDSketch.total_count(sketch) == 7
@@ -326,7 +324,7 @@ defmodule Mobius.Exports.HistogramTest do
     # The query degrades to everything observed since the reset instead of
     # crashing on the negative bin delta.
     assert {:ok, sketch} =
-             Exports.histogram(
+             Data.histogram(
                "reset.case.duration",
                %{},
                mobius_instance: instance,
@@ -335,6 +333,90 @@ defmodule Mobius.Exports.HistogramTest do
              )
 
     assert DDSketch.total_count(sketch) == 7
+  end
+
+  describe "build_window_sketch/7 baseline selection" do
+    @key {"roll.off.metric", %{}}
+    @opts [max_indexable_value: 1.0e9]
+
+    test "no baseline and no roll-off: the metric started inside the window" do
+      sketch =
+        Data.Histogram.build_window_sketch(
+          roll_off_snapshots(),
+          false,
+          "roll.off.metric",
+          %{},
+          @opts,
+          50,
+          250
+        )
+
+      assert DDSketch.total_count(sketch) == 25
+    end
+
+    test "no baseline after roll-off: the window truncates to retained history" do
+      # The pre-window baseline rolled out of retention. The oldest retained
+      # snapshot becomes the baseline, so only the observations after it are
+      # attributed to the window — not the metric's entire cumulative history.
+      sketch =
+        Data.Histogram.build_window_sketch(
+          roll_off_snapshots(),
+          true,
+          "roll.off.metric",
+          %{},
+          @opts,
+          50,
+          250
+        )
+
+      assert DDSketch.total_count(sketch) == 15
+    end
+
+    test "rolled off, but the metric is absent from the oldest scrape: it started inside retention" do
+      snapshots = [{50, %{}} | roll_off_snapshots()]
+
+      sketch =
+        Data.Histogram.build_window_sketch(
+          snapshots,
+          true,
+          "roll.off.metric",
+          %{},
+          @opts,
+          60,
+          250
+        )
+
+      assert DDSketch.total_count(sketch) == 25
+    end
+
+    test "an in-retention baseline wins regardless of roll-off" do
+      sketch =
+        Data.Histogram.build_window_sketch(
+          roll_off_snapshots(),
+          true,
+          "roll.off.metric",
+          %{},
+          @opts,
+          150,
+          250
+        )
+
+      assert DDSketch.total_count(sketch) == 15
+    end
+  end
+
+  # The metric's cumulative history: 10 observations of 10.0 by the first
+  # snapshot, 15 more of 100.0 by the second.
+  defp roll_off_snapshots() do
+    [
+      {100, %{@key => cumulative_snapshot(List.duplicate(10.0, 10))}},
+      {200, %{@key => cumulative_snapshot(List.duplicate(10.0, 10) ++ List.duplicate(100.0, 15))}}
+    ]
+  end
+
+  defp cumulative_snapshot(values) do
+    sketch = Enum.reduce(values, DDSketch.new(@opts), &DDSketch.insert(&2, &1))
+    :erlang.term_to_binary({sketch.positive_bins, sketch.negative_bins, sketch.zero_count})
   end
 
   defp assert_in_relative(actual, expected, tol) do

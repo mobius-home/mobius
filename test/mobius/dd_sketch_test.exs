@@ -48,6 +48,49 @@ defmodule Mobius.DDSketchTest do
         DDSketch.new(min_indexable_value: 1.0, max_indexable_value: 1.0)
       end
     end
+
+    test "integer option values are cast to floats" do
+      s = DDSketch.new(min_indexable_value: 1, max_indexable_value: 1_000_000)
+      assert s.min_indexable_value === 1.0
+      assert s.max_indexable_value === 1.0e6
+    end
+  end
+
+  describe "validate_opts/1" do
+    test "normalizes and fills every option" do
+      assert {:ok, opts} = DDSketch.validate_opts(min_indexable_value: 1)
+
+      assert opts[:relative_accuracy] === 0.1
+      assert opts[:min_indexable_value] === 1.0
+      assert opts[:max_indexable_value] === 1.0e18
+      assert opts[:on_overflow] == :clamp
+    end
+
+    test "a normalized option list builds the same sketch as the original" do
+      {:ok, opts} = DDSketch.validate_opts(relative_accuracy: 0.05, max_indexable_value: 1000)
+
+      assert DDSketch.new(opts) ==
+               DDSketch.new(relative_accuracy: 0.05, max_indexable_value: 1000.0)
+    end
+
+    test "rejects bad values without raising" do
+      assert {:error, _} = DDSketch.validate_opts(relative_accuracy: 0.0)
+      assert {:error, _} = DDSketch.validate_opts(relative_accuracy: "ten percent")
+      assert {:error, _} = DDSketch.validate_opts(min_indexable_value: -1)
+      assert {:error, _} = DDSketch.validate_opts(min_indexable_value: 10, max_indexable_value: 1)
+      assert {:error, _} = DDSketch.validate_opts(on_overflow: :explode)
+    end
+
+    test "rejects unknown option keys" do
+      assert {:error, message} = DDSketch.validate_opts(relative_accurracy: 0.05)
+      assert message =~ "unknown sketch options"
+    end
+
+    test "rejects non-keyword input" do
+      assert {:error, _} = DDSketch.validate_opts("histogram")
+      assert {:error, _} = DDSketch.validate_opts(%{relative_accuracy: 0.1})
+      assert {:error, _} = DDSketch.validate_opts([:histogram])
+    end
   end
 
   describe "insert/2 and basic structure" do

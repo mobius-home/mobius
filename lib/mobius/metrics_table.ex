@@ -70,7 +70,7 @@ defmodule Mobius.MetricsTable do
     dropped =
       Enum.reduce(keys, MapSet.new(), fn
         {name, type, meta} = key, dropped when elem(type, 0) == :hist ->
-          config_key = {Enum.join(name, "."), meta |> Map.keys() |> Enum.sort()}
+          config_key = Events.config_key(name, Map.keys(meta))
           current = Map.get(current_configs, config_key)
 
           if current != nil and Map.get(persisted_configs, config_key) == current do
@@ -109,9 +109,14 @@ defmodule Mobius.MetricsTable do
 
   @doc """
   Save the ets table to a file
+
+  The persistence directory may have been unavailable at boot (or gone
+  away since) — re-create it on every attempt so saving recovers as soon
+  as the filesystem allows.
   """
   @spec save(Mobius.instance(), Path.t()) :: :ok | {:error, reason :: term()}
   def save(instance, persistence_dir) do
+    _ = File.mkdir_p(persistence_dir)
     file = String.to_charlist("#{persistence_dir}/metrics_table")
 
     :ets.tab2file(instance, file)
@@ -133,7 +138,7 @@ defmodule Mobius.MetricsTable do
   def put(table, event_name, :counter, _value, meta) do
     key = make_key(event_name, :counter, meta)
 
-    put_counter_type(table, key, 1)
+    _ = put_counter_type(table, key, 1)
 
     :ok
   end
@@ -149,7 +154,7 @@ defmodule Mobius.MetricsTable do
   def put(table, metric_name, :sum, value, meta) do
     key = make_key(metric_name, :sum, meta)
 
-    put_counter_type(table, key, value)
+    _ = put_counter_type(table, key, value)
 
     :ok
   end

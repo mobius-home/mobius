@@ -9,6 +9,8 @@ defmodule Mobius do
 
   alias Telemetry.Metrics
 
+  require Logger
+
   @default_args [mobius_instance: :mobius, persistence_dir: "/data", autosave_interval: nil]
 
   @type time_unit() :: :second | :minute | :hour | :day
@@ -134,36 +136,44 @@ defmodule Mobius do
   @impl Supervisor
   def init(args) do
     mobius_persistence_path = Path.join(args[:persistence_dir], to_string(args[:mobius_instance]))
-    args = Keyword.put_new(args, :session, UUID.uuid4())
 
+    # An unusable persistence directory must not prevent boot — Mobius is
+    # observability, not business value. Run memory-only; every save
+    # attempt retries the write (and the mkdir), so persistence recovers
+    # as soon as the filesystem allows it.
     case ensure_mobius_persistence_dir(mobius_persistence_path) do
       :ok ->
-        args =
-          args
-          |> Keyword.put(:persistence_dir, mobius_persistence_path)
-          |> Keyword.put_new(:database, Mobius.RRD.new())
+        :ok
 
-        MetricsTable.init(args)
-
-        children =
-          [
-            {Mobius.TimeServer, args},
-            {Mobius.MetricsTable.Monitor, args},
-            {Mobius.EventsServer, args},
-            {Mobius.Registry, args},
-            {Mobius.Scraper, args},
-            {Mobius.ReportServer, args}
-          ]
-          |> maybe_enable_autosave(args)
-
-        Supervisor.init(children, strategy: :one_for_one)
-
-      {:error, :enoent} ->
-        raise("persistence_path does not exist: #{mobius_persistence_path}")
-
-      {:error, msg} ->
-        raise("could not start mobius: #{msg}")
+      {:error, reason} ->
+        Logger.warning(
+          "[Mobius] could not create persistence directory " <>
+            "#{mobius_persistence_path} (#{inspect(reason)}); starting without " <>
+            "persisted history, saves will be retried"
+        )
     end
+
+    args =
+      args
+      |> Keyword.put_new(:session, UUID.uuid4())
+      |> Keyword.update(:metrics, [], &Mobius.Events.sanitize_metrics/1)
+      |> Keyword.put(:persistence_dir, mobius_persistence_path)
+      |> Keyword.put_new(:database, Mobius.RRD.new())
+
+    MetricsTable.init(args)
+
+    children =
+      [
+        {Mobius.TimeServer, args},
+        {Mobius.MetricsTable.Monitor, args},
+        {Mobius.EventsServer, args},
+        {Mobius.Registry, args},
+        {Mobius.Scraper, args},
+        {Mobius.ReportServer, args}
+      ]
+      |> maybe_enable_autosave(args)
+
+    Supervisor.init(children, strategy: :one_for_one)
   end
 
   defp ensure_args(args) do

@@ -41,6 +41,7 @@ defmodule Mobius.DDSketch do
   @default_max_indexable_value 1.0e18
   @default_on_overflow :clamp
   @valid_on_overflow [:clamp, :drop]
+  @valid_opt_keys [:relative_accuracy, :min_indexable_value, :max_indexable_value, :on_overflow]
 
   @typedoc """
   Index of a positive or negative bin. Derived from the value's magnitude
@@ -105,47 +106,115 @@ defmodule Mobius.DDSketch do
   Options:
 
     * `:relative_accuracy` — α, the bound on relative quantile error.
-      Float in (0, 1). Defaults to `#{@default_relative_accuracy}`.
+      Number in (0, 1). Defaults to `#{@default_relative_accuracy}`.
     * `:min_indexable_value` — values whose magnitude is below this fold
       into the zero bucket. Defaults to `#{@default_min_indexable_value}`.
     * `:max_indexable_value` — values whose magnitude exceeds this
       clamp to the top bin (or drop). Defaults to
       `#{@default_max_indexable_value}`; tighten to cap bin growth.
     * `:on_overflow` — `:clamp` (default) or `:drop`. See `t:on_overflow/0`.
+
+  Integer values are accepted and cast to floats. Raises `ArgumentError`
+  on invalid options; use `validate_opts/1` for a non-raising check.
   """
   @spec new(keyword()) :: t()
   def new(opts \\ []) do
-    alpha = Keyword.get(opts, :relative_accuracy, @default_relative_accuracy)
-    min_v = Keyword.get(opts, :min_indexable_value, @default_min_indexable_value)
-    max_v = Keyword.get(opts, :max_indexable_value, @default_max_indexable_value)
+    case validate_opts(opts) do
+      {:ok, validated} -> build(validated)
+      {:error, message} -> raise ArgumentError, message
+    end
+  end
+
+  @doc """
+  Validate and normalize sketch options without raising.
+
+  Integer values for `:relative_accuracy`, `:min_indexable_value`, and
+  `:max_indexable_value` are cast to floats. Returns the normalized
+  option list with every option filled in, or `{:error, message}`
+  describing the first problem found — including unknown option keys,
+  which would otherwise be silently ignored and leave a misconfiguration
+  undetected.
+  """
+  @spec validate_opts(term()) :: {:ok, keyword()} | {:error, String.t()}
+  def validate_opts(opts) do
+    if Keyword.keyword?(opts) do
+      do_validate_opts(opts)
+    else
+      {:error, "sketch options must be a keyword list, got: #{inspect(opts)}"}
+    end
+  end
+
+  defp do_validate_opts(opts) do
+    alpha = opts |> Keyword.get(:relative_accuracy, @default_relative_accuracy) |> to_float()
+    min_v = opts |> Keyword.get(:min_indexable_value, @default_min_indexable_value) |> to_float()
+    max_v = opts |> Keyword.get(:max_indexable_value, @default_max_indexable_value) |> to_float()
     on_overflow = Keyword.get(opts, :on_overflow, @default_on_overflow)
 
-    unless is_float(alpha) and alpha > 0.0 and alpha < 1.0 do
-      raise ArgumentError, "relative_accuracy must be a float in (0, 1), got: #{inspect(alpha)}"
+    with :ok <- validate_known_keys(opts),
+         :ok <- validate_alpha(alpha),
+         :ok <- validate_min(min_v),
+         :ok <- validate_max(max_v, min_v),
+         :ok <- validate_on_overflow(on_overflow) do
+      {:ok,
+       [
+         relative_accuracy: alpha,
+         min_indexable_value: min_v,
+         max_indexable_value: max_v,
+         on_overflow: on_overflow
+       ]}
     end
+  end
 
-    unless is_float(min_v) and min_v > 0.0 do
-      raise ArgumentError, "min_indexable_value must be a positive float, got: #{inspect(min_v)}"
+  defp validate_known_keys(opts) do
+    case Keyword.keys(opts) -- @valid_opt_keys do
+      [] -> :ok
+      unknown -> {:error, "unknown sketch options: #{inspect(unknown)}"}
     end
+  end
 
-    unless is_float(max_v) and max_v > min_v do
-      raise ArgumentError,
-            "max_indexable_value must be a float greater than min_indexable_value"
-    end
+  defp validate_alpha(alpha) when is_float(alpha) and alpha > 0.0 and alpha < 1.0, do: :ok
 
-    unless on_overflow in @valid_on_overflow do
-      raise ArgumentError,
-            "on_overflow must be one of #{inspect(@valid_on_overflow)}, got: #{inspect(on_overflow)}"
-    end
+  defp validate_alpha(alpha) do
+    {:error, "relative_accuracy must be a number in (0, 1), got: #{inspect(alpha)}"}
+  end
+
+  defp validate_min(min_v) when is_float(min_v) and min_v > 0.0, do: :ok
+
+  defp validate_min(min_v) do
+    {:error, "min_indexable_value must be a positive number, got: #{inspect(min_v)}"}
+  end
+
+  defp validate_max(max_v, min_v) when is_float(max_v) and max_v > min_v, do: :ok
+
+  defp validate_max(max_v, _min_v) do
+    {:error,
+     "max_indexable_value must be a number greater than min_indexable_value, " <>
+       "got: #{inspect(max_v)}"}
+  end
+
+  defp validate_on_overflow(on_overflow) when on_overflow in @valid_on_overflow, do: :ok
+
+  defp validate_on_overflow(on_overflow) do
+    {:error,
+     "on_overflow must be one of #{inspect(@valid_on_overflow)}, got: #{inspect(on_overflow)}"}
+  end
+
+  defp to_float(value) when is_integer(value), do: value * 1.0
+  defp to_float(value), do: value
+
+  # Build a sketch from options already normalized by validate_opts/1.
+  defp build(opts) do
+    alpha = Keyword.fetch!(opts, :relative_accuracy)
+    max_v = Keyword.fetch!(opts, :max_indexable_value)
 
     gamma = (1.0 + alpha) / (1.0 - alpha)
     log_gamma = :math.log(gamma)
 
     %__MODULE__{
       relative_accuracy: alpha,
-      min_indexable_value: min_v,
+      min_indexable_value: Keyword.fetch!(opts, :min_indexable_value),
       max_indexable_value: max_v,
-      on_overflow: on_overflow,
+      on_overflow: Keyword.fetch!(opts, :on_overflow),
       gamma: gamma,
       log_gamma: log_gamma,
       max_positive_index: ceil(:math.log(max_v) / log_gamma)

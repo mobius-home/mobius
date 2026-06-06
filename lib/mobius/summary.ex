@@ -58,7 +58,7 @@ defmodule Mobius.Summary do
   # Naive algorithm. See Wikipedia. Clamp the operand at 0 before sqrt: the
   # naive sum-of-squares variance can lose precision and go slightly negative
   # via catastrophic cancellation when float values flow through, which would
-  # make :math.sqrt/1 raise. See FLEET_HEALTH.md.
+  # make :math.sqrt/1 raise.
   defp std_dev(sum, sum_sqrd, n) do
     max(0, (sum_sqrd - sum * sum / n) / (n - 1))
     |> :math.sqrt()

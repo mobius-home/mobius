@@ -44,7 +44,8 @@ defmodule Mobius.RRD do
             day_next: integer(),
             hour_next: integer(),
             minute_next: integer(),
-            second_next: integer()
+            second_next: integer(),
+            day_capacity: pos_integer()
           }
 
   @typedoc """
@@ -93,8 +94,25 @@ defmodule Mobius.RRD do
       day_next: 0,
       hour_next: 0,
       minute_next: 0,
-      second_next: 0
+      second_next: 0,
+      day_capacity: days
     }
+  end
+
+  @doc """
+  Whether the RRD may have discarded its oldest scrapes.
+
+  The day archive holds the oldest retained data, so history starts
+  rolling off once it has filled to capacity. Window queries use this to
+  distinguish "the metric started inside retention" (an absent
+  pre-window snapshot means an empty cumulative baseline) from "the
+  metric's earlier history rolled off" (an absent pre-window snapshot
+  means the baseline was lost, and the window must be truncated to the
+  retained data instead).
+  """
+  @spec rolled_off?(t()) :: boolean()
+  def rolled_off?(rrd) do
+    Enum.count(rrd.day) >= rrd.day_capacity
   end
 
   @typedoc """
@@ -213,7 +231,7 @@ defmodule Mobius.RRD do
     %{configs: persisted_configs, data: snapshots} = :erlang.binary_to_term(data)
 
     snapshots
-    |> drop_incompatible_histograms(persisted_configs, opts[:histogram_configs])
+    |> sanitize_histograms(persisted_configs, opts[:histogram_configs])
     |> do_load(rrd)
   catch
     _, _ -> {:error, Mobius.DataLoadError.exception(reason: :corrupt, who: rrd)}
@@ -223,40 +241,105 @@ defmodule Mobius.RRD do
     {:error, Mobius.DataLoadError.exception(reason: :unsupported_version, who: rrd)}
   end
 
-  # No current configuration to check against: load everything as-is.
-  defp drop_incompatible_histograms(snapshots, _persisted_configs, nil), do: snapshots
+  # Walk every persisted histogram entry and drop the ones that cannot be
+  # trusted, keeping everything else in the snapshot:
+  #
+  #   * corrupt entries — payloads that survived the outer decode but do not
+  #     decode to a valid sketch snapshot would otherwise raise at *query*
+  #     time, deep inside `Mobius.DDSketch.from_snapshot/2`
+  #   * incompatible entries — recorded under a sketch configuration that no
+  #     longer matches the current one (bin indices are meaningless under a
+  #     different configuration, so reinterpreting them would produce
+  #     silently wrong quantiles); only checked when `current_configs` is
+  #     given
+  defp sanitize_histograms(snapshots, persisted_configs, current_configs) do
+    {snapshots, {corrupt, incompatible}} =
+      Enum.map_reduce(snapshots, {MapSet.new(), MapSet.new()}, fn
+        {ts, {records, histograms}}, acc ->
+          {kept, acc} = sanitize_entries(histograms, acc, persisted_configs, current_configs)
+          {{ts, {records, kept}}, acc}
 
-  defp drop_incompatible_histograms(snapshots, persisted_configs, current_configs) do
-    {snapshots, dropped} =
-      Enum.map_reduce(snapshots, MapSet.new(), fn
-        {ts, {records, histograms}}, dropped ->
-          {kept, dropped} =
-            Enum.reduce(histograms, {%{}, dropped}, fn {key, payload}, {kept, dropped} ->
-              {name, tags} = key
-              config_key = {name, tags |> Map.keys() |> Enum.sort()}
-              current = Map.get(current_configs, config_key)
-
-              if current != nil and Map.get(persisted_configs, config_key) == current do
-                {Map.put(kept, key, payload), dropped}
-              else
-                {kept, MapSet.put(dropped, config_key)}
-              end
-            end)
-
-          {{ts, {records, kept}}, dropped}
-
-        {ts, records}, dropped ->
-          {{ts, records}, dropped}
+        {ts, records}, acc ->
+          {{ts, records}, acc}
       end)
 
-    if MapSet.size(dropped) > 0 do
+    if MapSet.size(corrupt) > 0 do
       Logger.warning(
-        "Dropping persisted histogram data for #{inspect(MapSet.to_list(dropped))}: " <>
+        "Dropping corrupt persisted histogram data for #{inspect(MapSet.to_list(corrupt))}"
+      )
+    end
+
+    if MapSet.size(incompatible) > 0 do
+      Logger.warning(
+        "Dropping persisted histogram data for #{inspect(MapSet.to_list(incompatible))}: " <>
           "sketch configuration changed or histograms no longer enabled for the metric"
       )
     end
 
     snapshots
+  end
+
+  defp sanitize_entries(histograms, acc, persisted_configs, current_configs) do
+    Enum.reduce(histograms, {%{}, acc}, fn {key, payload}, {kept, {corrupt, incompatible}} ->
+      case check_histogram_entry(key, payload, persisted_configs, current_configs) do
+        :ok ->
+          {Map.put(kept, key, payload), {corrupt, incompatible}}
+
+        :corrupt ->
+          {kept, {MapSet.put(corrupt, key), incompatible}}
+
+        {:incompatible, config_key} ->
+          {kept, {corrupt, MapSet.put(incompatible, config_key)}}
+      end
+    end)
+  end
+
+  defp check_histogram_entry({name, tags} = _key, payload, persisted_configs, current_configs)
+       when is_binary(name) and is_map(tags) do
+    cond do
+      not valid_histogram_payload?(payload) ->
+        :corrupt
+
+      current_configs == nil ->
+        # No current configuration to check against: keep as-is.
+        :ok
+
+      true ->
+        config_key = Mobius.Events.config_key(name, Map.keys(tags))
+        current = Map.get(current_configs, config_key)
+
+        if current != nil and Map.get(persisted_configs, config_key) == current do
+          :ok
+        else
+          {:incompatible, config_key}
+        end
+    end
+  end
+
+  defp check_histogram_entry(_key, _payload, _persisted_configs, _current_configs), do: :corrupt
+
+  # A valid at-rest payload is the term_to_binary encoding of a
+  # `t:Mobius.DDSketch.snapshot/0`: {positive_bins, negative_bins, zero_count}
+  # with integer bin indices and non-negative integer counts. The decode is
+  # `:safe` — a damaged payload must not allocate atoms.
+  defp valid_histogram_payload?(payload) when is_binary(payload) do
+    case :erlang.binary_to_term(payload, [:safe]) do
+      {pos, neg, zero} when is_map(pos) and is_map(neg) and is_integer(zero) and zero >= 0 ->
+        valid_bin_map?(pos) and valid_bin_map?(neg)
+
+      _ ->
+        false
+    end
+  rescue
+    ArgumentError -> false
+  end
+
+  defp valid_histogram_payload?(_payload), do: false
+
+  defp valid_bin_map?(bins) do
+    Enum.all?(bins, fn {idx, count} ->
+      is_integer(idx) and is_integer(count) and count >= 0
+    end)
   end
 
   defp do_load(data, rrd) when is_list(data) do
