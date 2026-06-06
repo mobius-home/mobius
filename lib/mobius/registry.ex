@@ -68,10 +68,12 @@ defmodule Mobius.Registry do
       id = {__MODULE__, name, self()}
 
       _ =
-        :telemetry.attach(id, event, &Mobius.Events.handle_metrics/4, %{
-          table: args[:mobius_instance],
-          metrics: metrics
-        })
+        :telemetry.attach(
+          id,
+          event,
+          &Mobius.Events.handle_metrics/4,
+          Mobius.Events.metric_handler_config(args[:mobius_instance], metrics)
+        )
 
       id
     end

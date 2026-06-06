@@ -91,6 +91,13 @@ defmodule Mobius.Scraper do
         Logger.warning(Exception.message(error))
 
         database
+
+      {:error, reason} ->
+        # e.g. an unreadable or not-yet-mounted persistence dir: start
+        # memory-only rather than crash the boot over history.
+        Logger.warning("[Mobius] Could not read persisted history because #{inspect(reason)}")
+
+        database
     end
   end
 
@@ -122,6 +129,16 @@ defmodule Mobius.Scraper do
   @spec all_histograms(Mobius.instance(), [all_opt()]) :: [{integer(), histograms()}]
   def all_histograms(instance, opts \\ []) do
     GenServer.call(name(instance), {:get_histograms, opts})
+  end
+
+  @doc """
+  Whether the RRD may have discarded its oldest scrapes.
+
+  See `Mobius.RRD.rolled_off?/1`.
+  """
+  @spec history_rolled_off?(Mobius.instance()) :: boolean()
+  def history_rolled_off?(instance) do
+    GenServer.call(name(instance), :history_rolled_off?)
   end
 
   defp to_metrics_list(timestamped_snapshots) do
@@ -156,6 +173,10 @@ defmodule Mobius.Scraper do
   def handle_call({:get_histograms, opts}, _from, state) do
     snapshots = query_snapshots(state, opts)
     {:reply, to_histograms_list(snapshots), state}
+  end
+
+  def handle_call(:history_rolled_off?, _from, state) do
+    {:reply, RRD.rolled_off?(state.database), state}
   end
 
   def handle_call(:save, _from, state) do
@@ -236,9 +257,12 @@ defmodule Mobius.Scraper do
     save_to_persistence(state)
   end
 
-  # Write our database to persistent storage
+  # Write our database to persistent storage. The persistence directory may
+  # have been unavailable at boot (or gone away since) — re-create it on
+  # every attempt so saving recovers as soon as the filesystem allows.
   defp save_to_persistence(state) do
     contents = RRD.save(state.database, histogram_configs: state.histogram_configs)
+    _ = File.mkdir_p(state.persistence_dir)
 
     case File.write(file(state), contents) do
       :ok ->

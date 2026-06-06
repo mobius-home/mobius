@@ -190,6 +190,10 @@ defmodule Mobius.EventsServer do
   end
 
   defp do_save(binary, state) do
+    # The persistence directory may have been unavailable at boot (or gone
+    # away since) — re-create it on every attempt so saving recovers as
+    # soon as the filesystem allows.
+    _ = File.mkdir_p(state.persistence_dir)
     path = make_file_path(state.persistence_dir)
 
     _ =

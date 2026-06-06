@@ -2,7 +2,7 @@ defmodule Mobius.Charts do
   @moduledoc """
   Query-ready data structures for graphing Mobius metrics.
 
-  `Mobius.Exports` returns the raw building blocks — a reconstructed
+  `Mobius.Data` returns the raw building blocks — a reconstructed
   `Mobius.DDSketch`, a flat list of metric points, a per-quantile map. Turning
   those into the shapes a chart actually wants (sorted histogram bars, a line
   per quantile over time, the latest value per metric) is the same handful of
@@ -146,7 +146,7 @@ defmodule Mobius.Charts do
 
   The metric must have been registered with histograms enabled
   (`reporter_options: [histogram: ...]`). Returns `{:error, reason}` from
-  `Mobius.Exports.histogram/3` when it is not.
+  `Mobius.Data.histogram/3` when it is not.
 
       {:ok, dist} = Mobius.Charts.distribution("http.request.duration", %{}, last: {1, :hour})
       # dist.bins => [%{value: 9.8, count: 412}, %{value: 11.0, count: 380}, ...]
@@ -159,7 +159,7 @@ defmodule Mobius.Charts do
     {from, to} = resolve_window(opts)
     window_opts = Keyword.merge(opts, from: from, to: to)
 
-    with {:ok, sketch} <- Exports.histogram(metric_name, tags, window_opts) do
+    with {:ok, sketch} <- Data.histogram(metric_name, tags, window_opts) do
       {:ok,
        %{
          metric: metric_name,
@@ -199,7 +199,7 @@ defmodule Mobius.Charts do
     # structured error if it is not histogram-enabled) and hands us a sketch
     # whose configuration we reuse to reconstruct every window's sketch.
     with {:ok, probe} <-
-           Exports.histogram(metric_name, tags, Keyword.merge(opts, from: from, to: to)) do
+           Data.histogram(metric_name, tags, Keyword.merge(opts, from: from, to: to)) do
       sketch_opts = sketch_opts(probe)
       key = {metric_name, tags}
 

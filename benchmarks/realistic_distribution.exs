@@ -92,9 +92,9 @@ defmodule RealisticDistribution do
 
   defp measure_full_rrd(n_bins) do
     pos_bins = Map.new(1..n_bins, fn i -> {i, 100} end)
-    sidecar = %{{"metric", %{}} => {pos_bins, %{}, 0}}
+    histograms = %{{"metric", %{}} => {pos_bins, %{}, 0}}
     summary = summary_record()
-    snapshot = {[summary], sidecar}
+    snapshot = {[summary], histograms}
 
     rrd = fill_rrd(RRD.new(), snapshot)
     word = :erlang.system_info(:wordsize)

@@ -196,7 +196,7 @@ count over uptime. Plan with worst case.
 When the live counters are lost but the snapshot history survives
 (e.g. a reboot where the metrics-table dump didn't persist), windowed
 queries detect the reset from the backwards-moving counts and degrade
-gracefully: `Mobius.Exports.histogram/3` (and the quantile/count
+gracefully: `Mobius.Data.histogram/3` (and the quantile/count
 queries built on it) falls back to everything observed since the
 reset, and `Mobius.Charts.quantiles_over_time/4` skips the one
 interval that straddles the reset.
@@ -232,9 +232,9 @@ baseline for comparison: 2.8 KB ETS, 114 KB heap, 54 KB disk
 | very wide (1 µs–1 hr in µs) | 22 KB | 1.2 MB | 216 KB | 110 |
 | defaults (1.0e-9 .. 1.0e18) | 66 KB | 3.2 MB | 544 KB | 311 |
 
-Each snapshot stores bins as a sidecar map keyed by `{name, tags}`
-with `%{idx => count}` per metric — ~7× smaller heap and ~14× smaller
-disk than the naive one-record-per-bin layout.
+Each snapshot stores bins in a separate histogram map keyed by
+`{name, tags}` with `%{idx => count}` per metric — ~7× smaller heap
+and ~14× smaller disk than the naive one-record-per-bin layout.
 
 A realistic distribution starts much smaller than worst case (a
 log-normal HTTP latency with median 50 ms populates ~23 bins

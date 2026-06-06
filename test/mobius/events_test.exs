@@ -14,10 +14,7 @@ defmodule Mobius.EventsTest do
   test "handles counter metric", %{table: table} do
     name = "events.test.count.me"
 
-    config = %{
-      table: table,
-      metrics: [Metrics.counter("events.test.count.me")]
-    }
+    config = Events.metric_handler_config(table, [Metrics.counter("events.test.count.me")])
 
     :ok = Events.handle_metrics([:events, :test, :count], %{}, %{}, config)
 
@@ -27,10 +24,7 @@ defmodule Mobius.EventsTest do
   test "handles last value metric", %{table: table} do
     name = "events.test.last.value"
 
-    config = %{
-      table: table,
-      metrics: [Metrics.last_value("events.test.last.value")]
-    }
+    config = Events.metric_handler_config(table, [Metrics.last_value("events.test.last.value")])
 
     :ok = Events.handle_metrics([:events, :test, :last, :value], %{value: 1000}, %{}, config)
 
@@ -123,7 +117,7 @@ defmodule Mobius.EventsTest do
           reporter_options: [histogram: [max_indexable_value: 1.0e9]]
         )
 
-      config = %{table: table, metrics: [metric]}
+      config = Events.metric_handler_config(table, [metric])
 
       :ok = Events.handle_metrics([:hist, :enabled, :metric], %{latency: 1.0}, %{}, config)
       :ok = Events.handle_metrics([:hist, :enabled, :metric], %{latency: 50.0}, %{}, config)
@@ -151,7 +145,7 @@ defmodule Mobius.EventsTest do
           reporter_options: [histogram: [relative_accuracy: 0.005, max_indexable_value: 1.0e9]]
         )
 
-      config = %{table: table, metrics: [metric]}
+      config = Events.metric_handler_config(table, [metric])
 
       :ok = Events.handle_metrics([:hist, :custom, :metric], %{latency: 10.0}, %{}, config)
 
@@ -174,7 +168,7 @@ defmodule Mobius.EventsTest do
       name = "hist.disabled.metric"
 
       metric = Metrics.summary(name, measurement: :latency)
-      config = %{table: table, metrics: [metric]}
+      config = Events.metric_handler_config(table, [metric])
 
       :ok = Events.handle_metrics([:hist, :disabled, :metric], %{latency: 10.0}, %{}, config)
 
@@ -195,7 +189,7 @@ defmodule Mobius.EventsTest do
           reporter_options: [histogram: [max_indexable_value: 1000.0]]
         )
 
-      config = %{table: table, metrics: [metric]}
+      config = Events.metric_handler_config(table, [metric])
 
       # Three values way above the cap, plus one inside it. With :clamp
       # (the default), all four are recorded; the three giants share the
@@ -224,7 +218,7 @@ defmodule Mobius.EventsTest do
           reporter_options: [histogram: [max_indexable_value: 1000.0, on_overflow: :drop]]
         )
 
-      config = %{table: table, metrics: [metric]}
+      config = Events.metric_handler_config(table, [metric])
 
       :ok = Events.handle_metrics([:hist, :drop, :metric], %{latency: 5_000.0}, %{}, config)
       :ok = Events.handle_metrics([:hist, :drop, :metric], %{latency: 100.0}, %{}, config)
@@ -247,7 +241,7 @@ defmodule Mobius.EventsTest do
           reporter_options: [histogram: [min_indexable_value: 1.0e-3, max_indexable_value: 1.0e9]]
         )
 
-      config = %{table: table, metrics: [metric]}
+      config = Events.metric_handler_config(table, [metric])
 
       :ok = Events.handle_metrics([:hist, :signed, :metric], %{delta: -100.0}, %{}, config)
       :ok = Events.handle_metrics([:hist, :signed, :metric], %{delta: 0.0}, %{}, config)

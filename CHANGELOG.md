@@ -15,21 +15,34 @@ any time. The public API SHOULD NOT be considered stable.
   metric via `reporter_options: [histogram: [...]]` to get percentiles
   (P50/P95/P99), SLO-style "% under threshold" counts, and
   distribution-shape data alongside the existing summary aggregate.
-  Query via `Mobius.Exports.histogram/3`, `quantile/4`, `quantiles/4`,
-  `histogram_count_below/4`, and `histogram_count_above/4`. See the
-  Histogram configurations guide for worked examples.
+  Query via `Mobius.Data.histogram/3`, `quantile/4`, `quantiles/4`,
+  `count_below/4`, and `count_above/4`. See the Histogram
+  configurations guide for worked examples.
+* `Mobius.Data`: the programmatic query API. Returns plain
+  `:ok`/`:error` tuples built for unattended callers (alerting rules,
+  reports, SLO checks) — when the Mobius instance is down or busy the
+  result is `{:error, :unavailable}` instead of a caller crash.
 * `Mobius.DDSketch`: sparse mergeable quantile sketch backing the
   histogram feature. Configurable α (default 0.1, ±10%), value range,
   and overflow behaviour (`:clamp` saturates to the top bin, `:drop`
   silently skips).
 * `Mobius.Scraper.all_histograms/2` for windowed access to the
-  per-snapshot histogram sidecar data.
+  per-snapshot histogram data.
 
 ### Changed
 
-* RRD format v3 snapshots now carry a `{records, histograms_sidecar}`
-  tuple. The v2 -> v3 migration wraps existing records in the new
-  shape with an empty sidecar, so persisted v2 files keep loading.
+* RRD format v3 snapshots now carry a `{records, histograms}` tuple,
+  with the histogram bin data kept in its own map. The v2 -> v3
+  migration wraps existing records in the new shape with an empty
+  histogram map, so persisted v2 files keep loading.
+* Mobius no longer raises at boot. Invalid histogram options disable
+  the histogram for that metric (the summary keeps working) with one
+  logged warning, and an unusable persistence directory degrades to
+  memory-only operation — every save attempt retries the write, so
+  persistence recovers when the filesystem allows.
+* Every declared tag is now recorded on each metric series, as `nil`
+  when the event metadata lacks it, so a series' identity no longer
+  depends on which keys a particular event happened to carry.
 
 ### Removed
 

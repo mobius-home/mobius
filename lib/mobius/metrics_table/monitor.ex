@@ -7,6 +7,8 @@ defmodule Mobius.MetricsTable.Monitor do
 
   alias Mobius.MetricsTable
 
+  require Logger
+
   @spec start_link([Mobius.arg()]) :: GenServer.on_start()
   def start_link(args) do
     GenServer.start_link(__MODULE__, args, name: name(args[:mobius_instance]))
@@ -44,8 +46,18 @@ defmodule Mobius.MetricsTable.Monitor do
     save_to_persistence(state)
   end
 
-  # Write our ETS table to persistent storage
+  # Write our ETS table to persistent storage. A failed write is logged and
+  # otherwise tolerated — writability can come and go on embedded targets,
+  # and the next save attempt retries.
   defp save_to_persistence(state) do
-    MetricsTable.save(state.mobius_instance, state.persistence_dir)
+    case MetricsTable.save(state.mobius_instance, state.persistence_dir) do
+      :ok ->
+        :ok
+
+      error ->
+        Logger.warning("[Mobius] Failed to save metrics table because #{inspect(error)}")
+
+        error
+    end
   end
 end

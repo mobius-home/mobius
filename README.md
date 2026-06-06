@@ -172,12 +172,12 @@ Telemetry.Metrics.summary("http.request.duration",
 )
 ```
 
-Query a window via `Mobius.Exports`:
+Query a window via `Mobius.Data`:
 
 ```elixir
-{:ok, p99} = Mobius.Exports.quantile("http.request.duration", 0.99)
-{:ok, qs}  = Mobius.Exports.quantiles("http.request.duration", [0.5, 0.95, 0.99])
-{:ok, ok}  = Mobius.Exports.histogram_count_below("http.request.duration", 200, %{}, last: {1, :hour})
+{:ok, p99} = Mobius.Data.quantile("http.request.duration", 0.99)
+{:ok, qs}  = Mobius.Data.quantiles("http.request.duration", [0.5, 0.95, 0.99])
+{:ok, ok}  = Mobius.Data.count_below("http.request.duration", 200, %{}, last: {1, :hour})
 ```
 
 #### Memory and disk

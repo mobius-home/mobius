@@ -15,7 +15,7 @@ defmodule Mobius.Exports do
   """
 
   alias Mobius.Asciichart
-  alias Mobius.Exports.{CSV, Histogram, MobiusBinaryFormat, UnsupportedMetricError}
+  alias Mobius.Exports.{CSV, Metrics, MobiusBinaryFormat, UnsupportedMetricError}
 
   @typedoc """
   Options to use when exporting time series metric data
@@ -142,7 +142,7 @@ defmodule Mobius.Exports do
   @spec metrics(Mobius.metric_name(), Mobius.metric_type(), map(), [export_opt()] | keyword()) ::
           [Mobius.metric()]
   def metrics(metric_name, type, tags, opts \\ []) do
-    Mobius.Data.metrics(metric_name, type, tags, opts)
+    Metrics.export(metric_name, type, tags, opts)
   end
 
   defp get_metrics(metric_name, type, tags, opts) do
@@ -319,65 +319,5 @@ defmodule Mobius.Exports do
           {:ok, [Mobius.metric()]} | {:error, Mobius.Exports.MBFParseError.t()}
   def parse_mbf(binary) do
     MobiusBinaryFormat.parse(binary)
-  end
-
-  @doc """
-  Reconstruct a DDSketch histogram for a metric over a time window.
-
-  The metric must have been registered with histograms enabled via
-  `reporter_options: [histogram: ...]`. Window defaults to the last
-  3 minutes; override with `:from`/`:to` or `:last`.
-
-      {:ok, sketch} = Mobius.Exports.histogram("http.request.duration", %{})
-      p95 = Mobius.DDSketch.quantile(sketch, 0.95)
-  """
-  @spec histogram(Mobius.metric_name(), map(), [export_opt()]) ::
-          {:ok, Mobius.DDSketch.t()} | {:error, term()}
-  def histogram(metric_name, tags \\ %{}, opts \\ []) do
-    Histogram.histogram(metric_name, tags, opts)
-  end
-
-  @doc """
-  Estimate the value at quantile `q` for a histogram metric over a window.
-
-  `q` is in `[0.0, 1.0]`. Returns `{:ok, nil}` when the window contains
-  no observations. See `histogram/3` for window options.
-  """
-  @spec quantile(Mobius.metric_name(), float(), map(), [export_opt()]) ::
-          {:ok, float() | nil} | {:error, term()}
-  def quantile(metric_name, q, tags \\ %{}, opts \\ []) do
-    Histogram.quantile(metric_name, q, tags, opts)
-  end
-
-  @doc """
-  Batch quantile estimates: `%{q => value}`.
-
-      {:ok, %{0.5 => p50, 0.95 => p95, 0.99 => p99}} =
-        Mobius.Exports.quantiles("http.request.duration", [0.5, 0.95, 0.99])
-  """
-  @spec quantiles(Mobius.metric_name(), [float()], map(), [export_opt()]) ::
-          {:ok, %{float() => float() | nil}} | {:error, term()}
-  def quantiles(metric_name, qs, tags \\ %{}, opts \\ []) do
-    Histogram.quantiles(metric_name, qs, tags, opts)
-  end
-
-  @doc """
-  Count of observations strictly below `threshold` in the window.
-
-  For SLO-style queries, e.g. "how many requests met our 200 ms budget?"
-  """
-  @spec histogram_count_below(Mobius.metric_name(), number(), map(), [export_opt()]) ::
-          {:ok, non_neg_integer()} | {:error, term()}
-  def histogram_count_below(metric_name, threshold, tags \\ %{}, opts \\ []) do
-    Histogram.count_below(metric_name, threshold, tags, opts)
-  end
-
-  @doc """
-  Count of observations strictly above `threshold` in the window.
-  """
-  @spec histogram_count_above(Mobius.metric_name(), number(), map(), [export_opt()]) ::
-          {:ok, non_neg_integer()} | {:error, term()}
-  def histogram_count_above(metric_name, threshold, tags \\ %{}, opts \\ []) do
-    Histogram.count_above(metric_name, threshold, tags, opts)
   end
 end

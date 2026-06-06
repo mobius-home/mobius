@@ -28,6 +28,86 @@ defmodule MobiusTest do
            end) =~ "Unable to load data because of :unsupported_version"
   end
 
+  @tag capture_log: true
+  test "boots without persistence when the persistence dir cannot be created" do
+    # A file sits where the directory tree should go: mkdir_p cannot succeed.
+    bad_parent = Path.join(@persistence_dir, "not_a_dir")
+    File.write!(bad_parent, "occupied")
+
+    log =
+      capture_log(fn ->
+        assert {:ok, _pid} =
+                 start_supervised({Mobius, persistence_dir: bad_parent, metrics: []})
+
+        # Memory-only operation: queries work, saving fails without crashing.
+        assert [] = Mobius.Exports.metrics("vm.memory.total", :last_value, %{})
+        assert {:error, _reason} = Mobius.save()
+      end)
+
+    assert log =~ "could not create persistence directory"
+  end
+
+  test "a deleted persistence dir is recreated on save" do
+    persistence_path = Path.join(@persistence_dir, @default_instance_str)
+    {:ok, _pid} = start_supervised({Mobius, @default_args})
+
+    assert :ok = Mobius.save(@default_instance_str)
+    File.rm_rf!(persistence_path)
+
+    # Writability can come and go — every save attempt re-creates the
+    # directory, so persistence recovers on its own.
+    assert :ok = Mobius.save(@default_instance_str)
+    assert File.exists?(Path.join(persistence_path, "history"))
+  end
+
+  test "boots when a metric's histogram options are invalid, keeping the summary" do
+    metrics = [
+      Telemetry.Metrics.summary("boot.bad.hist",
+        measurement: :v,
+        reporter_options: [histogram: [min_indexable_value: "tiny"]]
+      ),
+      Telemetry.Metrics.summary("boot.typo.hist",
+        measurement: :v,
+        reporter_options: [histogram: [relative_accurracy: 0.05]]
+      )
+    ]
+
+    log =
+      capture_log(fn ->
+        assert {:ok, _pid} =
+                 start_supervised({Mobius, Keyword.put(@default_args, :metrics, metrics)})
+
+        :telemetry.execute([:boot, :bad], %{v: 1.0}, %{})
+        :telemetry.execute([:boot, :typo], %{v: 1.0}, %{})
+
+        for name <- ["boot.bad.hist", "boot.typo.hist"] do
+          entries = Mobius.MetricsTable.get_entries_by_metric_name(:mobius, name)
+
+          assert Enum.any?(entries, fn {_, type, _, _} -> type == :summary end)
+          refute Enum.any?(entries, fn {_, type, _, _} -> is_tuple(type) end)
+        end
+      end)
+
+    assert log =~ "Disabling histogram for metric boot.bad.hist"
+    assert log =~ "Disabling histogram for metric boot.typo.hist"
+  end
+
+  test "integer histogram options are accepted and cast to floats" do
+    metrics = [
+      Telemetry.Metrics.summary("boot.int.hist",
+        measurement: :v,
+        reporter_options: [histogram: [min_indexable_value: 1, max_indexable_value: 1_000_000]]
+      )
+    ]
+
+    assert {:ok, _pid} = start_supervised({Mobius, Keyword.put(@default_args, :metrics, metrics)})
+
+    :telemetry.execute([:boot, :int], %{v: 5.0}, %{})
+
+    entries = Mobius.MetricsTable.get_entries_by_metric_name(:mobius, "boot.int.hist")
+    assert Enum.any?(entries, fn {_, type, _, _} -> match?({:hist, _, _}, type) end)
+  end
+
   test "can save persistence data" do
     persistence_path = Path.join(@persistence_dir, @default_instance_str)
     {:ok, _pid} = start_supervised({Mobius, @default_args})

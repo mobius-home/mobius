@@ -38,7 +38,7 @@ defmodule Mobius.DataTest do
       for n <- 100..119, do: :telemetry.execute([:db, :query], %{ms: n * 1.0}, %{})
       Process.sleep(@scrape_interval_ms * 2)
 
-      windows =
+      {:ok, windows} =
         Data.summary_windows("db.query.ms", %{}, mobius_instance: instance, last: {1, :hour})
 
       assert windows != []
@@ -68,7 +68,8 @@ defmodule Mobius.DataTest do
         Telemetry.Metrics.summary("never.summarized", measurement: :v)
       ])
 
-      assert Data.summary_windows("never.summarized", %{}, mobius_instance: instance) == []
+      assert Data.summary_windows("never.summarized", %{}, mobius_instance: instance) ==
+               {:ok, []}
     end
   end
 
@@ -84,7 +85,8 @@ defmodule Mobius.DataTest do
       :telemetry.execute([:vm, :memory], %{total: 110}, %{})
       Process.sleep(@scrape_interval_ms)
 
-      rows = Data.metrics("vm.memory.total", :last_value, %{}, mobius_instance: instance)
+      assert {:ok, rows} =
+               Data.metrics("vm.memory.total", :last_value, %{}, mobius_instance: instance)
 
       assert rows != []
 
@@ -110,7 +112,7 @@ defmodule Mobius.DataTest do
       Process.sleep(@scrape_interval_ms)
 
       opts = [mobius_instance: instance]
-      data_rows = Data.metrics("disk.free.bytes", :last_value, %{}, opts)
+      {:ok, data_rows} = Data.metrics("disk.free.bytes", :last_value, %{}, opts)
       export_rows = Mobius.Exports.metrics("disk.free.bytes", :last_value, %{}, opts)
 
       assert data_rows == export_rows
@@ -141,6 +143,28 @@ defmodule Mobius.DataTest do
 
       assert {:error, {:no_histogram_metric, _}} =
                Data.histogram("does.not.exist", %{}, mobius_instance: instance)
+    end
+  end
+
+  describe "unavailable instance" do
+    test "queries return {:error, :unavailable} instead of exiting" do
+      # No Mobius instance with this name is running — a raw GenServer.call
+      # would exit with :noproc and take an unattended caller down with it.
+      opts = [mobius_instance: :data_not_running]
+
+      assert Data.summary_windows("db.query.ms", %{}, opts) == {:error, :unavailable}
+      assert Data.metrics("vm.memory.total", :last_value, %{}, opts) == {:error, :unavailable}
+      assert Data.histogram("http.request.duration", %{}, opts) == {:error, :unavailable}
+      assert Data.quantile("http.request.duration", 0.5, %{}, opts) == {:error, :unavailable}
+
+      assert Data.quantiles("http.request.duration", [0.5], %{}, opts) ==
+               {:error, :unavailable}
+
+      assert Data.count_below("http.request.duration", 100, %{}, opts) ==
+               {:error, :unavailable}
+
+      assert Data.count_above("http.request.duration", 100, %{}, opts) ==
+               {:error, :unavailable}
     end
   end
 end

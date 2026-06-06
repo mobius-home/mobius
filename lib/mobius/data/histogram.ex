@@ -1,4 +1,4 @@
-defmodule Mobius.Exports.Histogram do
+defmodule Mobius.Data.Histogram do
   @moduledoc false
 
   # Reconstruct DDSketch histograms for a metric over a time window from the
@@ -32,6 +32,10 @@ defmodule Mobius.Exports.Histogram do
   the live counters while the snapshot history survived), the pre-reset
   baseline is unusable and the result degrades to everything observed
   since the reset.
+
+  If the pre-window baseline snapshot has rolled out of RRD retention,
+  the window is truncated to the retained history (the oldest retained
+  snapshot becomes the baseline) rather than silently over-counting.
   """
   @spec histogram(Mobius.metric_name(), map(), [opt()]) ::
           {:ok, DDSketch.t()} | {:error, term()}
@@ -48,7 +52,11 @@ defmodule Mobius.Exports.Histogram do
         # from/to into the Scraper query — we pull everything and pick
         # boundary snapshots ourselves.
         snapshots = Scraper.all_histograms(instance)
-        window_sketch = build_window_sketch(snapshots, metric_name, tags, sketch_opts, from, to)
+        rolled_off? = Scraper.history_rolled_off?(instance)
+
+        window_sketch =
+          build_window_sketch(snapshots, rolled_off?, metric_name, tags, sketch_opts, from, to)
+
         {:ok, window_sketch}
 
       {:error, _} = err ->
@@ -138,7 +146,7 @@ defmodule Mobius.Exports.Histogram do
         {now - last_seconds(opts[:last]), now}
 
       true ->
-        # Default: the last 3 minutes, matching Exports.Metrics' default.
+        # Default: the last 3 minutes, matching Mobius.Data's default.
         {now - 180, now}
     end
   end
@@ -149,12 +157,20 @@ defmodule Mobius.Exports.Histogram do
   defp last_seconds({n, :day}), do: n * 86400
   defp last_seconds(n) when is_integer(n), do: n
 
-  defp build_window_sketch(snapshots, metric_name, tags, sketch_opts, from, to) do
+  @doc false
+  # Public for tests: exercising the rolled-off baseline cases through the
+  # full stack would need a day archive that has actually wrapped.
+  def build_window_sketch(snapshots, rolled_off?, metric_name, tags, sketch_opts, from, to) do
     # Snapshots is a sorted list of {ts, %{{name, tags} => sketch_snapshot}}.
     # Find the sketch snapshot for this metric at each window endpoint.
     key = {metric_name, tags}
 
-    earlier = snapshot_at_or_before(snapshots, key, from - 1)
+    earlier =
+      case snapshot_at_or_before(snapshots, key, from - 1) do
+        nil -> rolloff_baseline(snapshots, key, rolled_off?)
+        snapshot -> snapshot
+      end
+
     later = snapshot_at_or_before(snapshots, key, to)
 
     case later do
@@ -185,6 +201,21 @@ defmodule Mobius.Exports.Histogram do
         end
     end
   end
+
+  # No snapshot exists at-or-before the window start. Either the metric
+  # genuinely started inside the window (an empty cumulative baseline is
+  # correct), or its earlier history rolled out of RRD retention (the true
+  # baseline was lost). Counters are cumulative, so a metric that predates
+  # retention appears in every retained scrape — including the very oldest.
+  # When history has rolled off and the metric is in that oldest scrape, use
+  # it as the baseline: the window is truncated to the retained history,
+  # rather than misattributing the metric's entire cumulative history to
+  # the window.
+  defp rolloff_baseline(_snapshots, _key, false), do: nil
+
+  defp rolloff_baseline([{_ts, histograms} | _], key, true), do: Map.get(histograms, key)
+
+  defp rolloff_baseline([], _key, true), do: nil
 
   # Walk scrapes ascending; return the sketch snapshot from the latest scrape
   # whose timestamp is ≤ ts AND that contained this metric, or nil.

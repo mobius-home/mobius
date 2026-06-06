@@ -150,6 +150,37 @@ defmodule Mobius.RRDTest do
     end
 
     @tag capture_log: true
+    test "version 3 drops corrupt histogram payloads, keeps valid ones" do
+      good = :erlang.term_to_binary({%{1 => 3}, %{}, 0})
+      not_a_term = <<1, 2, 3>>
+      wrong_shape = :erlang.term_to_binary([:not, :a, :snapshot])
+      negative_count = :erlang.term_to_binary({%{1 => -3}, %{}, 0})
+
+      rrd =
+        RRD.new(@args)
+        |> RRD.insert(
+          1234,
+          {[],
+           %{
+             {"latency.ms", %{}} => good,
+             {"broken.one.ms", %{}} => not_a_term,
+             {"broken.two.ms", %{}} => wrong_shape,
+             {"broken.three.ms", %{}} => negative_count
+           }}
+        )
+
+      expected_rrd =
+        RRD.new(@args)
+        |> RRD.insert(1234, {[], %{{"latency.ms", %{}} => good}})
+
+      rrd_binary = RRD.save(rrd) |> IO.iodata_to_binary()
+
+      # Corrupt payloads are dropped even when no current configs are given
+      # — they would otherwise raise at query time, not load time.
+      assert RRD.load(RRD.new(@args), rrd_binary) == {:ok, expected_rrd}
+    end
+
+    @tag capture_log: true
     test "version 3 drops histogram data when the metric is no longer histogram-enabled" do
       configs = %{{"latency.ms", []} => %{relative_accuracy: 0.1}}
       payload = :erlang.term_to_binary({%{1 => 3}, %{}, 0})
@@ -193,6 +224,17 @@ defmodule Mobius.RRDTest do
 
     assert RRD.load(empty_tlb, unexpected_term3) ==
              {:error, Mobius.DataLoadError.exception(reason: :corrupt)}
+  end
+
+  test "rolled_off? flips once the day archive fills to capacity" do
+    rrd = RRD.new(days: 2, hours: 2, minutes: 2, seconds: 2)
+    refute RRD.rolled_off?(rrd)
+
+    rrd = RRD.insert(rrd, 0, :first_day)
+    refute RRD.rolled_off?(rrd)
+
+    rrd = RRD.insert(rrd, 86_400, :second_day)
+    assert RRD.rolled_off?(rrd)
   end
 
   test "fill up the all buffers" do
