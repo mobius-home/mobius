@@ -128,23 +128,25 @@ defmodule MobiusTest do
     assert File.exists?(Path.join(persistence_path, "metrics_table"))
   end
 
-  describe "reset/1" do
+  describe "remove_all_data/1" do
     test "clears in-memory metrics, history, the event log, and persisted files" do
       persistence_path = Path.join(@persistence_dir, @default_instance_str)
       instance = String.to_atom(@default_instance_str)
 
       metrics = [
-        Telemetry.Metrics.counter("reset.test.count", event_name: [:reset, :test])
+        Telemetry.Metrics.counter("remove_all_data.test.count",
+          event_name: [:remove_all_data, :test]
+        )
       ]
 
       {:ok, _pid} = start_supervised({Mobius, Keyword.put(@default_args, :metrics, metrics)})
 
       # Record a metric and an event.
-      :telemetry.execute([:reset, :test], %{count: 1}, %{})
+      :telemetry.execute([:remove_all_data, :test], %{count: 1}, %{})
 
       Mobius.EventsServer.insert(
         instance,
-        Mobius.Event.new("test", "reset.event", %{a: 1}, %{}, timestamp: 1)
+        Mobius.Event.new("test", "remove_all_data.event", %{a: 1}, %{}, timestamp: 1)
       )
 
       # In-memory metrics table now has an entry.
@@ -163,8 +165,8 @@ defmodule MobiusTest do
       assert File.exists?(Path.join(persistence_path, "metrics_table"))
       assert File.exists?(Path.join(persistence_path, "event_log"))
 
-      # Reset wipes it all out.
-      assert :ok = Mobius.reset(instance)
+      # Removing all data wipes it all out.
+      assert :ok = Mobius.remove_all_data(instance)
 
       assert Mobius.MetricsTable.get_entries(instance) == []
       assert Mobius.Scraper.all(instance) == []
@@ -175,23 +177,25 @@ defmodule MobiusTest do
       refute File.exists?(Path.join(persistence_path, "event_log"))
     end
 
-    test "keeps tracking configured metrics after a reset" do
+    test "keeps tracking configured metrics after removing all data" do
       instance = String.to_atom(@default_instance_str)
 
       metrics = [
-        Telemetry.Metrics.counter("reset.again.count", event_name: [:reset, :again])
+        Telemetry.Metrics.counter("remove_all_data.again.count",
+          event_name: [:remove_all_data, :again]
+        )
       ]
 
       {:ok, _pid} = start_supervised({Mobius, Keyword.put(@default_args, :metrics, metrics)})
 
-      :telemetry.execute([:reset, :again], %{count: 1}, %{})
+      :telemetry.execute([:remove_all_data, :again], %{count: 1}, %{})
       assert Mobius.MetricsTable.get_entries(instance) != []
 
-      assert :ok = Mobius.reset(instance)
+      assert :ok = Mobius.remove_all_data(instance)
       assert Mobius.MetricsTable.get_entries(instance) == []
 
       # The metric is still registered, so new measurements are recorded.
-      :telemetry.execute([:reset, :again], %{count: 1}, %{})
+      :telemetry.execute([:remove_all_data, :again], %{count: 1}, %{})
       assert Mobius.MetricsTable.get_entries(instance) != []
     end
 
@@ -199,15 +203,17 @@ defmodule MobiusTest do
       instance = String.to_atom(@default_instance_str)
 
       metrics = [
-        Telemetry.Metrics.counter("reset.save.count", event_name: [:reset, :save])
+        Telemetry.Metrics.counter("remove_all_data.save.count",
+          event_name: [:remove_all_data, :save]
+        )
       ]
 
       {:ok, _pid} = start_supervised({Mobius, Keyword.put(@default_args, :metrics, metrics)})
 
-      :telemetry.execute([:reset, :save], %{count: 1}, %{})
+      :telemetry.execute([:remove_all_data, :save], %{count: 1}, %{})
       Process.sleep(1_100)
 
-      assert :ok = Mobius.reset(instance)
+      assert :ok = Mobius.remove_all_data(instance)
       assert :ok = Mobius.save(instance)
 
       # The metrics table file may be written again, but it must hold no
