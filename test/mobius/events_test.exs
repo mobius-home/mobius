@@ -72,7 +72,7 @@ defmodule Mobius.EventsTest do
     end
 
     @tag :tmp_dir
-    test "process measurements", %{tmp_dir: tmp_dir} do
+    test "process measurements with legacy :measurements_values key", %{tmp_dir: tmp_dir} do
       start_supervised!(
         {Mobius, mobius_instance: :process_measurements, persistence_dir: tmp_dir}
       )
@@ -90,6 +90,43 @@ defmodule Mobius.EventsTest do
       assert event.name == "a.b.c"
       assert event.measurements == %{a: 2, b: 1}
       assert event.tags == %{t: 1}
+    end
+
+    @tag :tmp_dir
+    test "process measurements with documented :measurement_values key", %{tmp_dir: tmp_dir} do
+      start_supervised!({Mobius, mobius_instance: :measurement_values, persistence_dir: tmp_dir})
+
+      config = %{
+        table: :measurement_values,
+        event_opts: [tags: [:t], measurement_values: &event_measurement_processor/1],
+        session: "test"
+      }
+
+      :ok = Events.handle_event("a.b.c", %{a: 1, b: 1}, %{t: 1, z: 2}, config)
+
+      assert [event] = Mobius.EventLog.list(instance: :measurement_values)
+
+      assert event.name == "a.b.c"
+      assert event.measurements == %{a: 2, b: 1}
+      assert event.tags == %{t: 1}
+    end
+
+    @tag :tmp_dir
+    test "applies the :group option", %{tmp_dir: tmp_dir} do
+      start_supervised!({Mobius, mobius_instance: :event_group, persistence_dir: tmp_dir})
+
+      config = %{
+        table: :event_group,
+        event_opts: [group: :network],
+        session: "test"
+      }
+
+      :ok = Events.handle_event("a.b.c", %{a: 1}, %{}, config)
+
+      assert [event] = Mobius.EventLog.list(instance: :event_group)
+
+      assert event.name == "a.b.c"
+      assert event.group == :network
     end
   end
 
