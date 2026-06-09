@@ -101,9 +101,14 @@ defmodule Mobius.EventsTest do
     value
   end
 
+  @histogram_table :mobius_test_histogram_metric
+
   describe "histogram-enabled summary metric" do
     setup do
-      table = :"mobius_test_histogram_#{System.unique_integer([:positive])}"
+      # A stable, compile-time table name. Tests in a module run sequentially
+      # and the named ETS table is owned by the test process, so it is torn
+      # down between tests and this literal is always free to (re)create.
+      table = @histogram_table
       MetricsTable.init(mobius_instance: table, persistence_dir: "/does/not/matter/here")
       {:ok, %{table: table}}
     end

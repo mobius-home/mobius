@@ -28,7 +28,7 @@ defmodule Mobius.Registry do
   end
 
   defp name(instance) do
-    Module.concat(__MODULE__, instance)
+    {:via, Registry, {Mobius.ProcessRegistry, {__MODULE__, instance}}}
   end
 
   @doc """

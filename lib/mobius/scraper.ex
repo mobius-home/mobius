@@ -18,7 +18,7 @@ defmodule Mobius.Scraper do
   end
 
   defp name(mobius_instance) do
-    Module.concat(__MODULE__, mobius_instance)
+    {:via, Registry, {Mobius.ProcessRegistry, {__MODULE__, mobius_instance}}}
   end
 
   @typedoc """

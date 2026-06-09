@@ -140,7 +140,7 @@ defmodule Mobius do
   end
 
   defp name(instance) do
-    Module.concat(__MODULE__.Supervisor, instance)
+    {:via, Registry, {Mobius.ProcessRegistry, {__MODULE__, instance}}}
   end
 
   @impl Supervisor
