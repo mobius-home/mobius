@@ -56,8 +56,10 @@ defmodule Mobius do
      automatic writes of the persistence data (default disabled) metric
      information
   * `:scrape_interval` - time in milliseconds between scrapes of the tracked
-     metrics into the history (defaults to `1_000`). Must be a positive
-     integer; invalid values fall back to the default with a logged warning
+     metrics into the history (defaults to `1_000`). The history stores at
+     most one snapshot per second, so values below `1_000` are clamped to
+     `1_000` with a logged warning; other invalid values fall back to the
+     default. The first scrape runs immediately at startup
   * `:compression_level` - the zlib level (`0..9`) used when compressing
      persisted metric history and event log data. Higher levels trade more CPU
      at save time for smaller files. Defaults to `9` (maximum compression). `0`

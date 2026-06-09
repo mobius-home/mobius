@@ -178,10 +178,7 @@ defmodule MobiusTest do
         )
       ]
 
-      {:ok, _pid} =
-        start_supervised(
-          {Mobius, Keyword.merge(@default_args, metrics: metrics, scrape_interval: 50)}
-        )
+      {:ok, _pid} = start_supervised({Mobius, Keyword.merge(@default_args, metrics: metrics)})
 
       # Record a metric and an event.
       :telemetry.execute([:remove_all_data, :test], %{count: 1}, %{})
@@ -249,7 +246,7 @@ defmodule MobiusTest do
         )
       ]
 
-      args = Keyword.merge(@default_args, metrics: metrics, scrape_interval: 50)
+      args = Keyword.merge(@default_args, metrics: metrics)
       {:ok, _pid} = start_supervised({Mobius, args})
 
       :telemetry.execute([:remove_all_data, :save], %{count: 1}, %{})
@@ -272,7 +269,9 @@ defmodule MobiusTest do
     end
   end
 
-  defp wait_for_scrape(instance, timeout_ms \\ 1_000) do
+  # The metric lands at the first scrape tick after its telemetry event, up
+  # to one scrape interval (1 s) later — poll with margin for slow CI.
+  defp wait_for_scrape(instance, timeout_ms \\ 2_500) do
     case Mobius.Scraper.all(instance) do
       [] when timeout_ms > 0 ->
         Process.sleep(10)
