@@ -6,6 +6,7 @@ defmodule Mobius.EventLog do
   alias Mobius.{Event, EventsServer}
 
   @event_log_binary_format_version 1
+  @default_compression_level 9
 
   @typedoc """
   Options to query the event log
@@ -21,35 +22,46 @@ defmodule Mobius.EventLog do
     EventsServer.list(instance, opts)
   end
 
+  @typedoc """
+  Options for serializing the event log
+
+  * `:compression_level` - the zlib level (`0..9`) used to compress the payload,
+    defaults to `9`. `0` disables compression.
+  """
+  @type serialize_opt() :: {:compression_level, 0..9}
+
   @doc """
   Return the event log in the Mobius binary format
   """
-  @spec to_binary([opt()]) :: binary()
+  @spec to_binary([opt() | serialize_opt()]) :: binary()
   def to_binary(opts \\ []) do
     opts
     |> list()
-    |> events_to_binary()
+    |> events_to_binary(opts)
   end
 
   @doc """
   Turn a list of Events into a binary
   """
-  @spec events_to_binary([Event.t()]) :: binary()
-  def events_to_binary(events) do
-    bin = :erlang.term_to_binary(events)
+  @spec events_to_binary([Event.t()], [serialize_opt()]) :: binary()
+  def events_to_binary(events, opts \\ []) do
+    compression_level = opts[:compression_level] || @default_compression_level
+    bin = :erlang.term_to_binary(events, [{:compressed, compression_level}])
 
     <<@event_log_binary_format_version, bin::binary>>
   end
 
   @doc """
   Save the current state of the event log to disk
+
+  The configured compression level for the instance is applied by the events
+  server when it writes the file.
   """
   @spec save([opt()]) :: :ok
   def save(opts \\ []) do
     instance = opts[:instance] || :mobius
-    bin = to_binary(opts)
 
-    EventsServer.save(instance, bin)
+    EventsServer.save(instance)
   end
 
   @doc """
