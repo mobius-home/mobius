@@ -110,11 +110,9 @@ defmodule Mobius.ScraperTest do
            ] == Scraper.all(instance)
   end
 
-  test "neither records nor loses history until the clock synchronizes", %{
+  test "buffers pre-sync scrapes and records them once the clock synchronizes", %{
     persistence_dir: persistence_dir
   } do
-    # Pre-sync scrapes would carry garbage timestamps, so nothing may be
-    # recorded — and the loaded history must survive untouched.
     instance = :scraper_unsynced_boot
     FakeClock.set(false)
     on_exit(&FakeClock.clear/0)
@@ -141,15 +139,48 @@ defmodule Mobius.ScraperTest do
     # Let several scrape ticks pass while the clock is unsynchronized.
     Process.sleep(2_500)
 
+    # Nothing recorded into the RRD yet, and the loaded history is intact.
     assert Scraper.all(instance) == history
 
+    flip_time = System.system_time(:second)
     FakeClock.set(true)
 
     eventually(fn -> length(Scraper.all(instance)) > length(history) end)
 
     records = Scraper.all(instance)
     assert Enum.take(records, 2) == history
-    assert Enum.all?(records, fn {ts, _record} -> ts >= now - 30 end)
+
+    new_records = records -- history
+
+    # The scrapes parked while unsynchronized were inserted, not dropped:
+    # their (step-corrected) timestamps predate the sync flip. The clock in
+    # this test never actually steps, so the correction is ~0.
+    assert Enum.count(new_records, fn {ts, _} -> ts <= flip_time + 1 end) >= 2
+
+    assert Enum.all?(new_records, fn {ts, record} ->
+             ts >= now and record == {"vm.memory.total", :last_value, 125, %{}}
+           end)
+
+    timestamps = Enum.map(records, fn {ts, _} -> ts end)
+    assert timestamps == Enum.sort(timestamps)
+  end
+
+  test "parks nothing when no metrics arrive before the clock syncs", %{
+    persistence_dir: persistence_dir
+  } do
+    instance = :scraper_unsynced_empty
+    FakeClock.set(false)
+    on_exit(&FakeClock.clear/0)
+
+    {_pid, ^instance} =
+      start_scraper(instance, persistence_dir, RRD.new(@rrd_args), clock: FakeClock)
+
+    # Ticks pass with an empty metrics table, then the clock syncs.
+    Process.sleep(1_500)
+    FakeClock.set(true)
+    Process.sleep(1_500)
+
+    assert Scraper.all(instance) == []
   end
 
   @tag capture_log: true

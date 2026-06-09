@@ -10,6 +10,10 @@ defmodule Mobius.Scraper do
   @interval 1_000
   @file_name "history"
 
+  # Pre-sync snapshots wait here for the clock step; the cap bounds memory
+  # on a device that stays unsynchronized for a long time.
+  @out_of_time_capacity 100
+
   @doc """
   Start the scraper server
   """
@@ -62,15 +66,20 @@ defmodule Mobius.Scraper do
     # Register before reading the initial value so a sync landing between
     # the two calls arrives as a message instead of being missed.
     :ok = TimeServer.register(args[:mobius_instance], self())
+    synced? = TimeServer.synchronized?(args[:mobius_instance])
 
     state =
       args
       |> state_from_args()
-      |> Map.put(:synced?, TimeServer.synchronized?(args[:mobius_instance]))
+      |> Map.put(:synced?, synced?)
+      |> Map.put(:out_of_time_buffer, make_out_of_time_buffer(synced?))
       |> make_database(args)
 
     {:ok, state}
   end
+
+  defp make_out_of_time_buffer(true), do: nil
+  defp make_out_of_time_buffer(false), do: CircularBuffer.new(@out_of_time_capacity)
 
   defp state_from_args(args) do
     # The resolved sketch configurations ride along with the persisted RRD
@@ -225,10 +234,20 @@ defmodule Mobius.Scraper do
   end
 
   @impl GenServer
-  # Pre-sync scrapes would carry garbage timestamps (e.g. 1970-era before
-  # NTP), so skip them; recording picks up at the first post-sync scrape.
+  # Pre-sync timestamps are garbage (e.g. 1970-era before NTP), so park the
+  # snapshots until the TimeServer reports the clock step to correct them by.
   def handle_info(:scrape, %{synced?: false} = state) do
-    {:noreply, state}
+    case MetricsTable.get_entries(state.mobius_instance) do
+      [] ->
+        {:noreply, state}
+
+      entries ->
+        ts = System.system_time(:second)
+        snapshot = build_snapshot(entries)
+        buffer = CircularBuffer.insert(state.out_of_time_buffer, {ts, snapshot})
+
+        {:noreply, %{state | out_of_time_buffer: buffer}}
+    end
   end
 
   def handle_info(:scrape, state) do
@@ -246,12 +265,34 @@ defmodule Mobius.Scraper do
     end
   end
 
-  def handle_info({Mobius.TimeServer, _sync_timestamp, _adjustment}, state) do
+  def handle_info({Mobius.TimeServer, _sync, _adjustment}, %{out_of_time_buffer: nil} = state) do
     {:noreply, %{state | synced?: true}}
+  end
+
+  def handle_info({Mobius.TimeServer, sync_timestamp, adjustment}, state) do
+    database = insert_adjusted(state, sync_timestamp, adjustment)
+
+    {:noreply, %{state | synced?: true, out_of_time_buffer: nil, database: database}}
   end
 
   def handle_info(_message, state) do
     {:noreply, state}
+  end
+
+  # Re-stamp the parked pre-sync snapshots by the clock step and insert
+  # them, the same correction Mobius.EventsServer applies to its events.
+  defp insert_adjusted(state, sync_timestamp, adjustment) do
+    adjustment_sec = System.convert_time_unit(adjustment, :native, :second)
+    sync_timestamp_sec = System.convert_time_unit(sync_timestamp, :native, :second)
+
+    state.out_of_time_buffer
+    |> CircularBuffer.to_list()
+    |> Enum.reduce(state.database, fn {ts, snapshot}, database ->
+      # A scrape taken after the sync but before this message arrived is
+      # already correctly stamped.
+      ts = if sync_timestamp_sec < ts, do: ts, else: ts + adjustment_sec
+      RRD.insert_with_regression_recovery(database, ts, snapshot)
+    end)
   end
 
   # Split incoming entries into the regular records list and the compact
