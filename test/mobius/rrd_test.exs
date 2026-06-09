@@ -37,36 +37,36 @@ defmodule Mobius.RRDTest do
 
   describe "serialize and decode" do
     test "version 1" do
-      in_rrd =
-        RRD.new(@args)
-        |> RRD.insert(1234, [{[:vm, :memory, :total], :last_value, 123, %{}}])
-        |> RRD.insert(3000, [{[:vm, :memory, :total], :last_value, 124, %{}}])
+      v1_data = [
+        {1234, [{[:vm, :memory, :total], :last_value, 123, %{}}]},
+        {3000, [{[:vm, :memory, :total], :last_value, 124, %{}}]}
+      ]
+
+      v1_binary = IO.iodata_to_binary([1, :erlang.term_to_binary(v1_data)])
 
       expected_rrd =
         RRD.new(@args)
         |> RRD.insert(1234, {[{"vm.memory.total", :last_value, 123, %{}}], %{}})
         |> RRD.insert(3000, {[{"vm.memory.total", :last_value, 124, %{}}], %{}})
 
-      in_rrd_binary = RRD.save(in_rrd, serialization_version: 1) |> IO.iodata_to_binary()
-      assert RRD.load(RRD.new(@args), in_rrd_binary) == {:ok, expected_rrd}
+      assert RRD.load(RRD.new(@args), v1_binary) == {:ok, expected_rrd}
     end
 
     test "version 2 (legacy map-shape records)" do
-      v2_in_rrd =
-        RRD.new(@args)
-        |> RRD.insert(1234, [
-          %{name: "vm.memory.total", type: :last_value, value: 123, tags: %{}, timestamp: 1234}
-        ])
-        |> RRD.insert(3000, [
-          %{name: "vm.memory.total", type: :last_value, value: 124, tags: %{}, timestamp: 3000}
-        ])
+      v2_data = [
+        {1234,
+         [%{name: "vm.memory.total", type: :last_value, value: 123, tags: %{}, timestamp: 1234}]},
+        {3000,
+         [%{name: "vm.memory.total", type: :last_value, value: 124, tags: %{}, timestamp: 3000}]}
+      ]
+
+      v2_binary = IO.iodata_to_binary([2, :erlang.term_to_binary(v2_data)])
 
       expected_rrd =
         RRD.new(@args)
         |> RRD.insert(1234, {[{"vm.memory.total", :last_value, 123, %{}}], %{}})
         |> RRD.insert(3000, {[{"vm.memory.total", :last_value, 124, %{}}], %{}})
 
-      v2_binary = RRD.save(v2_in_rrd, serialization_version: 2) |> IO.iodata_to_binary()
       assert RRD.load(RRD.new(@args), v2_binary) == {:ok, expected_rrd}
     end
 
