@@ -584,11 +584,12 @@ defmodule Mobius.DDSketch do
 
   Returns `{:ok, sketch}`, or `{:error, :reset}` when any per-bin delta
   is negative. Counters are cumulative and monotonically nondecreasing
-  within a series, so a negative delta means the accumulator was reset
-  between the two snapshots — e.g. the live counters were lost in a
-  reboot while the snapshot history survived. Callers decide how to
-  degrade: skip the interval, or fall back to `later` alone (everything
-  observed since the reset).
+  within a series, so a negative delta means the accumulator was lost or
+  rebuilt between the two snapshots — corrupt counter persistence or a
+  sketch-config change, not a routine reboot (counters are persisted and
+  restored intact across reboots). Callers decide how to degrade: skip
+  the interval, or fall back to `later` alone (everything observed since
+  the reset).
   """
   @spec delta(t(), t()) :: {:ok, t()} | {:error, :reset}
   def delta(

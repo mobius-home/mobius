@@ -1,14 +1,16 @@
-defmodule Mobius.Exports.Metrics do
+defmodule Mobius.Data.Metrics do
   @moduledoc false
 
-  # Module for exporting metrics
+  # Self-contained implementation behind `Mobius.Data.metrics/4`: pull the
+  # stored records from the scraper for a window and filter them down to a
+  # single metric, summarizing summary records on the way out.
 
-  alias Mobius.{Exports, Scraper, Summary}
+  alias Mobius.{Scraper, Summary}
 
   @doc """
-  Export metrics
+  Fetch the raw, un-delta'd rows for a metric over a window.
   """
-  @spec export(binary(), Mobius.metric_type(), map(), [Exports.export_opt()]) :: [Mobius.metric()]
+  @spec export(binary(), Mobius.metric_type(), map(), [Mobius.Data.opt()]) :: [Mobius.metric()]
   def export(metric_name, type, tags, opts \\ []) do
     mobius_instance = opts[:mobius_instance] || :mobius
 

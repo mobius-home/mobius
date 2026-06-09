@@ -138,7 +138,7 @@ defmodule Mobius do
     mobius_persistence_path = Path.join(args[:persistence_dir], to_string(args[:mobius_instance]))
 
     # An unusable persistence directory must not prevent boot — Mobius is
-    # observability, not business value. Run memory-only; every save
+    # observability, not the device's purpose. Run memory-only; every save
     # attempt retries the write (and the mkdir), so persistence recovers
     # as soon as the filesystem allows it.
     case ensure_mobius_persistence_dir(mobius_persistence_path) do
