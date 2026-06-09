@@ -76,6 +76,37 @@ defmodule MobiusTest do
     assert File.exists?(Path.join(persistence_path, "history"))
   end
 
+  @tag capture_log: true
+  test "save reports an error when only the event log write fails" do
+    persistence_path = Path.join(@persistence_dir, @default_instance_str)
+    {:ok, _pid} = start_supervised({Mobius, @default_args})
+
+    handler_id = "save-event-log-error-test"
+
+    :ok =
+      :telemetry.attach_many(
+        handler_id,
+        [[:mobius, :save, :stop], [:mobius, :save, :exception]],
+        fn event, _measurements, _metadata, pid -> send(pid, {:telemetry_event, event}) end,
+        self()
+      )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+
+    # A directory sits where the event log file should go, so the metrics
+    # writes succeed but the event log write cannot.
+    File.mkdir_p!(Path.join(persistence_path, "event_log"))
+
+    assert {:error, _reason} = Mobius.save(@default_instance)
+
+    assert_received {:telemetry_event, [:mobius, :save, :exception]}
+    refute_received {:telemetry_event, [:mobius, :save, :stop]}
+
+    # The sibling save paths still persisted their files.
+    assert File.exists?(Path.join(persistence_path, "history"))
+    assert File.exists?(Path.join(persistence_path, "metrics_table"))
+  end
+
   test "boots when a metric's histogram options are invalid, keeping the summary" do
     metrics = [
       Telemetry.Metrics.summary("boot.bad.hist",
