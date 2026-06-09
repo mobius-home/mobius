@@ -512,7 +512,7 @@ defmodule Mobius do
         "type: {:summary, :average}, or use Mobius.current/2 for the histogram."
 
   defp explain(:unavailable),
-    do: "Mobius is not available to answer queries right now. Is the instance running?"
+    do: "The Mobius instance is not running or did not respond."
 
   defp explain({:invalid_summary_field, field}),
     do: "#{inspect(field)} is not a summary field. Use :average, :std_dev, or :reports."
