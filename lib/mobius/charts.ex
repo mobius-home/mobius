@@ -26,18 +26,18 @@ defmodule Mobius.Charts do
     * `latest/2` — the most recent value for a set of metrics
       (`t:latest_value/0`).
 
-  All four accept the same window options as `Mobius.Exports` (`:last`,
-  `:from`/`:to`, `:mobius_instance`) and report the resolved absolute window
+  All four accept the same window options (`:last`, `:from`/`:to`,
+  `:mobius_instance`; see `t:opt/0`) and report the resolved absolute window
   back in the result so a caller can label axes without re-deriving it.
   """
 
-  alias Mobius.{Data, DDSketch, Exports, Scraper, Summary}
+  alias Mobius.{Data, DDSketch, Scraper, Summary}
 
   @default_window_seconds 180
   @max_history_seconds 60 * 86_400
 
   @typedoc """
-  Options shared by every query, identical to `t:Mobius.Exports.export_opt/0`.
+  Options shared by every query.
 
     * `:mobius_instance` - the instance to query (default `:mobius`)
     * `:last` - window covering the last `x`, where `x` is an integer number of
@@ -113,11 +113,18 @@ defmodule Mobius.Charts do
         }
 
   @typedoc """
+  A metric type to query: a plain `t:Mobius.metric_type/0` (`:counter`,
+  `:last_value`, `:sum`, `:summary`), or a summary field such as
+  `{:summary, :average}`.
+  """
+  @type metric_type() :: Mobius.metric_type() | {:summary, atom()}
+
+  @typedoc """
   A single metric's values over time.
   """
   @type series() :: %{
           metric: Mobius.metric_name(),
-          type: Exports.export_metric_type(),
+          type: metric_type(),
           tags: map(),
           window: window(),
           points: [point()]
@@ -127,15 +134,15 @@ defmodule Mobius.Charts do
   A metric to request a latest value for: `{name, type, tags}`.
   """
   @type metric_ref() ::
-          {Mobius.metric_name(), Exports.export_metric_type()}
-          | {Mobius.metric_name(), Exports.export_metric_type(), map()}
+          {Mobius.metric_name(), metric_type()}
+          | {Mobius.metric_name(), metric_type(), map()}
 
   @typedoc """
   The most recent stored value for one metric.
   """
   @type latest_value() :: %{
           metric: Mobius.metric_name(),
-          type: Exports.export_metric_type(),
+          type: metric_type(),
           tags: map(),
           value: number(),
           timestamp: integer()
@@ -156,7 +163,7 @@ defmodule Mobius.Charts do
   @spec distribution(Mobius.metric_name(), map(), [opt()]) ::
           {:ok, distribution()} | {:error, term()}
   def distribution(metric_name, tags \\ %{}, opts \\ []) do
-    {from, to} = resolve_window(opts)
+    {from, to} = Data.resolve_window(opts)
     window_opts = Keyword.merge(opts, from: from, to: to)
 
     with {:ok, sketch} <- Data.histogram(metric_name, tags, window_opts) do
@@ -193,7 +200,7 @@ defmodule Mobius.Charts do
           {:ok, quantiles_over_time()} | {:error, term()}
   def quantiles_over_time(metric_name, quantiles, tags \\ %{}, opts \\ []) do
     instance = opts[:mobius_instance] || :mobius
-    {from, to} = resolve_window(opts)
+    {from, to} = Data.resolve_window(opts)
 
     # A single histogram query both validates the metric (returning the nice
     # structured error if it is not histogram-enabled) and hands us a sketch
@@ -219,7 +226,7 @@ defmodule Mobius.Charts do
   @doc """
   A single metric's values over time as `{timestamp, value}` points.
 
-  Accepts any `t:Mobius.Exports.export_metric_type/0`. Use a plain type
+  Accepts any `t:metric_type/0`. Use a plain type
   (`:last_value`, `:counter`, `:sum`) for a gauge or counter line, or
   `{:summary, :average}` / `{:summary, :std_dev}` / `{:summary, :reports}`
   for a summary metric (plain `:summary` gives the full per-interval
@@ -235,12 +242,12 @@ defmodule Mobius.Charts do
       avg = Mobius.Charts.series("http.request.duration", {:summary, :average}, %{}, last: {1, :hour})
       # avg.points => [%{timestamp: ..., value: 12.4}, ...]
   """
-  @spec series(Mobius.metric_name(), Exports.export_metric_type(), map(), [opt()]) :: series()
+  @spec series(Mobius.metric_name(), metric_type(), map(), [opt()]) :: series()
   def series(metric_name, type, tags \\ %{}, opts \\ [])
 
   def series(metric_name, :summary, tags, opts) do
     instance = opts[:mobius_instance] || :mobius
-    {from, to} = resolve_window(opts)
+    {from, to} = Data.resolve_window(opts)
 
     points =
       instance
@@ -259,7 +266,7 @@ defmodule Mobius.Charts do
   def series(metric_name, {:summary, field} = type, tags, opts)
       when field in [:average, :std_dev, :reports] do
     instance = opts[:mobius_instance] || :mobius
-    {from, to} = resolve_window(opts)
+    {from, to} = Data.resolve_window(opts)
 
     points =
       instance
@@ -278,12 +285,12 @@ defmodule Mobius.Charts do
   end
 
   def series(metric_name, type, tags, opts) do
-    {from, to} = resolve_window(opts)
+    {from, to} = Data.resolve_window(opts)
+
+    {:ok, rows} = Data.metrics(metric_name, type, tags, Keyword.merge(opts, from: from, to: to))
 
     points =
-      metric_name
-      |> Exports.metrics(type, tags, Keyword.merge(opts, from: from, to: to))
-      |> Enum.map(fn %{timestamp: ts, value: value} -> %{timestamp: ts, value: value} end)
+      Enum.map(rows, fn %{timestamp: ts, value: value} -> %{timestamp: ts, value: value} end)
 
     %{
       metric: metric_name,
@@ -316,13 +323,16 @@ defmodule Mobius.Charts do
     |> Enum.flat_map(fn ref ->
       {name, type, tags} = normalize_ref(ref)
 
-      case Exports.metrics(name, type, tags, opts) do
-        [] ->
+      case Data.metrics(name, type, tags, opts) do
+        {:ok, []} ->
           []
 
-        points ->
+        {:ok, points} ->
           %{timestamp: ts, value: value} = List.last(points)
           [%{metric: name, type: type, tags: tags, value: value, timestamp: ts}]
+
+        {:error, _} ->
+          []
       end
     end)
   end
@@ -402,20 +412,4 @@ defmodule Mobius.Charts do
 
   defp normalize_ref({name, type}), do: {name, type, %{}}
   defp normalize_ref({name, type, tags}), do: {name, type, tags}
-
-  defp resolve_window(opts) do
-    now = System.system_time(:second)
-
-    cond do
-      opts[:from] != nil -> {opts[:from], opts[:to] || now}
-      opts[:last] != nil -> {now - last_seconds(opts[:last]), now}
-      true -> {now - @default_window_seconds, now}
-    end
-  end
-
-  defp last_seconds({n, :second}), do: n
-  defp last_seconds({n, :minute}), do: n * 60
-  defp last_seconds({n, :hour}), do: n * 3600
-  defp last_seconds({n, :day}), do: n * 86_400
-  defp last_seconds(n) when is_integer(n), do: n
 end

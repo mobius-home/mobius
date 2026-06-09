@@ -15,7 +15,8 @@ defmodule Mobius.Exports do
   """
 
   alias Mobius.Asciichart
-  alias Mobius.Exports.{CSV, Metrics, MobiusBinaryFormat, UnsupportedMetricError}
+  alias Mobius.Data.Metrics
+  alias Mobius.Exports.{CSV, MobiusBinaryFormat, UnsupportedMetricError}
 
   @typedoc """
   Options to use when exporting time series metric data

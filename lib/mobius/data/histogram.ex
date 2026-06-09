@@ -9,7 +9,7 @@ defmodule Mobius.Data.Histogram do
   # start of the window and the latest cumulative bin counts at the end of
   # the window; the bin-by-bin delta is the window's true distribution.
 
-  alias Mobius.{DDSketch, Events, Registry, Scraper}
+  alias Mobius.{Data, DDSketch, Events, Registry, Scraper}
 
   @type opt() ::
           {:mobius_instance, Mobius.instance()}
@@ -28,10 +28,14 @@ defmodule Mobius.Data.Histogram do
   An empty sketch is returned when no histogram observations fell into the
   window (or no snapshots covered it).
 
-  If the cumulative counters reset inside the window (e.g. a reboot wiped
-  the live counters while the snapshot history survived), the pre-reset
-  baseline is unusable and the result degrades to everything observed
-  since the reset.
+  Snapshots are persisted, so a routine reboot loses nothing or
+  next-to-nothing — the counters are restored and pick up where they
+  left off. The cumulative counters only fall (a "reset") when the
+  counter state is genuinely lost or rebuilt while older snapshots
+  survive: corrupt or unreadable counter persistence, or a sketch-config
+  change that invalidates the bins. In that case the pre-reset baseline
+  is unusable and the result degrades to everything observed since the
+  reset.
 
   If the pre-window baseline snapshot has rolled out of RRD retention,
   the window is truncated to the retained history (the oldest retained
@@ -45,7 +49,7 @@ defmodule Mobius.Data.Histogram do
     case find_histogram_metric(instance, metric_name, tags) do
       {:ok, metric} ->
         sketch_opts = Events.histogram_opts(metric)
-        {from, to} = resolve_window(opts)
+        {from, to} = Data.resolve_window(opts)
 
         # We need the latest snapshot *before* the window in order to
         # establish the cumulative-counter baseline, so we cannot push
@@ -135,28 +139,6 @@ defmodule Mobius.Data.Histogram do
     end
   end
 
-  defp resolve_window(opts) do
-    now = System.system_time(:second)
-
-    cond do
-      opts[:from] != nil ->
-        {opts[:from], opts[:to] || now}
-
-      opts[:last] != nil ->
-        {now - last_seconds(opts[:last]), now}
-
-      true ->
-        # Default: the last 3 minutes, matching Mobius.Data's default.
-        {now - 180, now}
-    end
-  end
-
-  defp last_seconds({n, :second}), do: n
-  defp last_seconds({n, :minute}), do: n * 60
-  defp last_seconds({n, :hour}), do: n * 3600
-  defp last_seconds({n, :day}), do: n * 86400
-  defp last_seconds(n) when is_integer(n), do: n
-
   @doc false
   # Public for tests: exercising the rolled-off baseline cases through the
   # full stack would need a day archive that has actually wrapped.
@@ -191,12 +173,13 @@ defmodule Mobius.Data.Histogram do
             sketch
 
           {:error, :reset} ->
-            # The cumulative counters reset between the two boundary
-            # snapshots (e.g. a reboot wiped the live counters while the
-            # snapshot history survived), so the pre-window baseline is
-            # unusable. The later snapshot alone — everything observed
-            # since the reset — is the best available approximation of
-            # the window.
+            # The cumulative counters fell between the two boundary
+            # snapshots, so the counter state was lost or rebuilt — corrupt
+            # counter persistence or a sketch-config change, not a routine
+            # reboot (those restore the counters intact). The pre-window
+            # baseline is unusable, so the later snapshot alone —
+            # everything observed since the reset — is the best available
+            # approximation of the window.
             later_sketch
         end
     end

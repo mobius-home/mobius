@@ -101,23 +101,6 @@ defmodule Mobius.DataTest do
       # Raw, un-delta'd: the latest stored cumulative last_value is present.
       assert Enum.any?(rows, &(&1.value == 110))
     end
-
-    @tag :tmp_dir
-    test "matches Mobius.Exports.metrics for the same query", %{tmp_dir: tmp_dir} do
-      instance = :data_metrics_parity
-      metrics = [Telemetry.Metrics.last_value("disk.free.bytes", measurement: :bytes)]
-      start_instance(instance, tmp_dir, metrics)
-
-      :telemetry.execute([:disk, :free], %{bytes: 4096}, %{})
-      Process.sleep(@scrape_interval_ms)
-
-      opts = [mobius_instance: instance]
-      {:ok, data_rows} = Data.metrics("disk.free.bytes", :last_value, %{}, opts)
-      export_rows = Mobius.Exports.metrics("disk.free.bytes", :last_value, %{}, opts)
-
-      assert data_rows == export_rows
-      assert data_rows != []
-    end
   end
 
   describe "histogram/3" do

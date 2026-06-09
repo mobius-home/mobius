@@ -1,22 +1,16 @@
 defmodule Mobius.Data do
   @moduledoc """
-  Programmatic access to Mobius's stored metric data.
+  Programmatic access to Mobius's raw, unprocessed metric data.
 
-  This is the module to reach for when you want the *data itself* — to feed an
-  alerting rule, a report, an SLO check, or any further computation. It is
-  deliberately separate from the two neighbouring modules:
+  Most callers want `Mobius.Charts`: it runs the common transforms — sorted
+  histogram bars, a line per quantile over time, the latest value per metric —
+  and hands back chart-ready shapes. Reach for `Mobius.Data` when you need the
+  underlying data itself, unprocessed, to do something Charts doesn't: feed an
+  alerting rule, an SLO check, a report, or any further computation of your
+  own.
 
-    * `Mobius.Charts` is for plotting and visualization. It returns shapes a
-      renderer wants (sorted bars, one line per quantile, nested
-      `%{timestamp:, value:}` points) and reports the resolved window so axes
-      can be labelled. Reach for it when you are drawing a picture.
-    * `Mobius.Exports` exists to serialize metric history into transport
-      formats (CSV, the Mobius Binary Format). It will be removed or reworked;
-      do not build new code on top of it.
-
-  `Mobius.Data` is the new home for programmatic access. It returns plain,
-  flat maps — no plotting envelope — with absolute second-resolution
-  timestamps and raw numeric values:
+  `Mobius.Data` returns plain, flat maps — no plotting envelope — with
+  absolute second-resolution timestamps and raw numeric values:
 
     * `summary_windows/3` — per-window summary statistics, each window carrying
       `average`, `std_dev`, **and** `reports` (the number of observations that
@@ -37,8 +31,8 @@ defmodule Mobius.Data do
   crash.
   """
 
-  alias Mobius.Data.Histogram
-  alias Mobius.{Exports, Scraper, Summary}
+  alias Mobius.Data.{Histogram, Metrics}
+  alias Mobius.{Scraper, Summary}
 
   @max_history_seconds 60 * 86_400
 
@@ -57,6 +51,13 @@ defmodule Mobius.Data do
           | {:from, integer()}
           | {:to, integer()}
           | {:last, integer() | {integer(), Mobius.time_unit()}}
+
+  @typedoc """
+  A metric type to query: a plain `t:Mobius.metric_type/0` (`:counter`,
+  `:last_value`, `:sum`, `:summary`), or a summary field such as
+  `{:summary, :average}`.
+  """
+  @type metric_type() :: Mobius.metric_type() | {:summary, atom()}
 
   @typedoc """
   One window's summary statistics.
@@ -124,10 +125,10 @@ defmodule Mobius.Data do
       Mobius.Data.metrics("vm.memory.total", :last_value, %{}, last: 30)
       # => {:ok, [%{timestamp: ..., name: "vm.memory.total", type: :last_value, value: 51_200_000, tags: %{}}, ...]}
   """
-  @spec metrics(Mobius.metric_name(), Exports.export_metric_type(), map(), [opt()]) ::
+  @spec metrics(Mobius.metric_name(), metric_type(), map(), [opt()]) ::
           {:ok, [Mobius.metric()]} | {:error, :unavailable}
   def metrics(metric_name, type, tags \\ %{}, opts \\ []) do
-    {:ok, Exports.Metrics.export(metric_name, type, tags, opts)}
+    {:ok, Metrics.export(metric_name, type, tags, opts)}
   catch
     :exit, _reason -> {:error, :unavailable}
   end
@@ -250,7 +251,12 @@ defmodule Mobius.Data do
     end)
   end
 
-  defp resolve_window(opts) do
+  # Shared window resolution for the Data and Charts query APIs: turn
+  # `:from`/`:to` or `:last` (or nothing → the default 3-minute window) into
+  # absolute `{from, to}` unix-second bounds.
+  @doc false
+  @spec resolve_window([opt()]) :: {integer(), integer()}
+  def resolve_window(opts) do
     now = System.system_time(:second)
 
     cond do
