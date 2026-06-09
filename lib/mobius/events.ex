@@ -142,6 +142,13 @@ defmodule Mobius.Events do
         e ->
           Logger.error("Could not format metric #{inspect(metric)}")
           Logger.error(Exception.format(:error, e, __STACKTRACE__))
+      catch
+        # A throw or exit from a user-supplied callback must not escape to
+        # :telemetry, which would permanently detach the handler — Mobius is
+        # observability and must never silently stop the app's metrics.
+        kind, reason ->
+          Logger.error("Could not format metric #{inspect(metric)}")
+          Logger.error(Exception.format(kind, reason, __STACKTRACE__))
       end
     end
 
@@ -304,6 +311,13 @@ defmodule Mobius.Events do
       e ->
         Logger.error("Could not process event #{inspect(event)}")
         Logger.error(Exception.format(:error, e, __STACKTRACE__))
+    catch
+      # A throw or exit from a user-supplied callback must not escape to
+      # :telemetry, which would permanently detach the handler — Mobius is
+      # observability and must never silently stop the app's events.
+      kind, reason ->
+        Logger.error("Could not process event #{inspect(event)}")
+        Logger.error(Exception.format(kind, reason, __STACKTRACE__))
     end
 
     :ok

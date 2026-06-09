@@ -140,6 +140,73 @@ defmodule Mobius.EventsTest do
 
   @histogram_table :mobius_test_histogram_metric
 
+  describe "user callbacks that throw" do
+    @tag capture_log: true
+    test "a throwing measurement function must not detach the metrics handler", %{table: table} do
+      event = [:events, :test, :crash]
+      handler_id = {__MODULE__, event, self()}
+
+      bad =
+        Metrics.last_value("events.test.crash.bad",
+          measurement: fn _measurements -> throw(:boom) end
+        )
+
+      good = Metrics.last_value("events.test.crash.good", measurement: :value)
+
+      config = Events.metric_handler_config(table, [bad, good])
+      :ok = :telemetry.attach(handler_id, event, &Events.handle_metrics/4, config)
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      # The bad metric throws — if that escapes to :telemetry the whole
+      # handler is permanently detached and metrics silently stop.
+      :telemetry.execute(event, %{value: 1}, %{})
+
+      assert Enum.any?(:telemetry.list_handlers(event), &(&1.id == handler_id))
+
+      # A later event for the well-behaved metric must still be recorded
+      :telemetry.execute(event, %{value: 42}, %{})
+
+      assert [{"events.test.crash.good", :last_value, 42, %{}}] =
+               MetricsTable.get_entries_by_metric_name(table, "events.test.crash.good")
+    end
+
+    @tag :tmp_dir
+    @tag capture_log: true
+    test "a throwing measurements translator must not detach the event handler", %{
+      tmp_dir: tmp_dir
+    } do
+      start_supervised!({Mobius, mobius_instance: :crashing_event, persistence_dir: tmp_dir})
+
+      event = [:events, :test, :event_crash]
+      handler_id = {__MODULE__, event, self()}
+
+      config = %{
+        table: :crashing_event,
+        event_opts: [
+          measurements_values: fn
+            {:boom, _value} -> throw(:boom)
+            {_key, value} -> value
+          end
+        ],
+        session: "test"
+      }
+
+      :ok = :telemetry.attach(handler_id, event, &Events.handle_event/4, config)
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      :telemetry.execute(event, %{boom: 1}, %{})
+
+      assert Enum.any?(:telemetry.list_handlers(event), &(&1.id == handler_id))
+
+      # A later well-behaved event must still be recorded
+      :telemetry.execute(event, %{a: 1}, %{})
+
+      assert [recorded] = Mobius.EventLog.list(instance: :crashing_event)
+      assert recorded.name == "events.test.event_crash"
+      assert recorded.measurements == %{a: 1}
+    end
+  end
+
   describe "histogram-enabled summary metric" do
     setup do
       # A stable, compile-time table name. Tests in a module run sequentially
