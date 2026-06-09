@@ -5,7 +5,7 @@ defmodule Mobius do
 
   use Supervisor
 
-  alias Mobius.{Event, EventLog, MetricsTable, ReportServer, Scraper, Summary}
+  alias Mobius.{Charts, Event, EventLog, MetricsTable, Plot, ReportServer, Scraper, Summary}
 
   alias Telemetry.Metrics
 
@@ -309,4 +309,174 @@ defmodule Mobius do
   def get_latest_events(instance \\ :mobius) do
     ReportServer.get_latest_events(instance)
   end
+
+  @doc """
+  Print the metrics available to chart for an instance.
+
+  Lists each metric's name, type, tags, and whether a histogram is available,
+  so you know what to pass to `current/2` and `plot/2`.
+  """
+  @spec metrics(instance()) :: :ok
+  def metrics(instance \\ :mobius) do
+    case Charts.list_metrics(instance) do
+      [] ->
+        IO.puts("No metrics are being tracked for #{inspect(instance)}.")
+
+      listing ->
+        name_width = listing |> Enum.map(&String.length(&1.metric)) |> Enum.max()
+        type_width = listing |> Enum.map(&(&1.type |> inspect() |> String.length())) |> Enum.max()
+
+        IO.puts("Metrics available for #{inspect(instance)}:\n")
+        Enum.each(listing, &IO.puts(format_metric_line(&1, name_width, type_width)))
+    end
+
+    :ok
+  end
+
+  defp format_metric_line(entry, name_width, type_width) do
+    name = String.pad_trailing(entry.metric, name_width)
+    type = entry.type |> inspect() |> String.pad_trailing(type_width)
+    histogram = if entry.histogram?, do: "  (histogram)", else: ""
+    tags = if entry.tags == [], do: "", else: "  tags: #{inspect(entry.tags)}"
+    "  #{name}  #{type}#{histogram}#{tags}"
+  end
+
+  @doc """
+  Print the current value of a metric.
+
+  If the metric is histogram-enabled, a small ASCII histogram of its buckets is
+  printed too. For tagged metrics pass `tags:` with the exact tag map.
+
+  Options: `:type`, `:tags`, `:mobius_instance`, and the window options
+  (`:last`/`:from`/`:to`) shared by `Mobius.Charts`. When `:type` is omitted it
+  is inferred from the tracked metrics.
+  """
+  @spec current(metric_name(), keyword()) :: :ok
+  def current(metric_name, opts \\ []) do
+    instance = opts[:mobius_instance] || :mobius
+    tags = opts[:tags] || %{}
+    query_opts = Keyword.put(opts, :mobius_instance, instance)
+
+    case resolve_type(metric_name, opts, instance) do
+      {:ok, type} ->
+        print_current(metric_name, type, tags, query_opts)
+
+      {:error, reason} ->
+        IO.puts(explain(reason))
+    end
+
+    :ok
+  end
+
+  @doc """
+  Print a line plot of a metric over time.
+
+  The plot renders the series as a braille curve with a relative time x-axis.
+
+  Options: `:type`, `:tags`, `:mobius_instance`, the window options
+  (`:last`/`:from`/`:to`), and `:width`/`:height` for the plot dimensions. When
+  `:type` is omitted it is inferred from the tracked metrics; summary metrics
+  are not plottable directly — pass a field (e.g. `type: {:summary, :average}`)
+  or use `current/2` for the histogram.
+
+      Mobius.plot("vm.memory.total", last: {5, :minute})
+  """
+  @spec plot(metric_name(), keyword()) :: :ok
+  def plot(metric_name, opts \\ []) do
+    instance = opts[:mobius_instance] || :mobius
+    tags = opts[:tags] || %{}
+    query_opts = Keyword.put(opts, :mobius_instance, instance)
+
+    with {:ok, type} <- resolve_type(metric_name, opts, instance),
+         :ok <- ensure_plottable(type) do
+      %{points: points} = Charts.series(metric_name, type, tags, query_opts)
+
+      case Plot.line(points, opts) do
+        {:ok, chart} ->
+          IO.puts([chart_header(metric_name, type, tags), "\n\n", chart])
+
+        {:error, message} ->
+          IO.puts("#{metric_name}: #{message}")
+      end
+    else
+      {:error, reason} -> IO.puts(explain(reason))
+    end
+
+    :ok
+  end
+
+  defp print_current(metric_name, type, tags, opts) do
+    case Charts.latest([{metric_name, type, tags}], opts) do
+      [%{value: value}] ->
+        IO.puts([chart_header(metric_name, type, tags), " = ", format_current(value)])
+
+      [] ->
+        IO.puts([chart_header(metric_name, type, tags), ": no recent value"])
+    end
+
+    case Charts.distribution(metric_name, tags, opts) do
+      {:ok, %{bins: [_ | _] = bins}} ->
+        {:ok, histogram} = Plot.histogram(bins, [])
+        IO.write(["\n", histogram])
+
+      _ ->
+        :ok
+    end
+  end
+
+  # Use the caller's :type when given, otherwise infer it from the tracked
+  # metrics. Inference fails when the name is unknown or maps to several types.
+  defp resolve_type(metric_name, opts, instance) do
+    case Keyword.fetch(opts, :type) do
+      {:ok, type} ->
+        {:ok, type}
+
+      :error ->
+        types =
+          instance
+          |> Charts.list_metrics()
+          |> Enum.filter(&(&1.metric == metric_name))
+          |> Enum.map(& &1.type)
+          |> Enum.uniq()
+
+        case types do
+          [] -> {:error, {:unknown_metric, metric_name}}
+          [type] -> {:ok, type}
+          many -> {:error, {:ambiguous_type, metric_name, many}}
+        end
+    end
+  end
+
+  defp format_current(value) when is_number(value), do: to_string(value)
+  defp format_current(value), do: inspect(value)
+
+  defp ensure_plottable(:summary), do: {:error, :summary_not_plottable}
+  defp ensure_plottable(_type), do: :ok
+
+  defp chart_header(metric_name, type, tags) do
+    [
+      IO.ANSI.yellow(),
+      metric_name,
+      IO.ANSI.reset(),
+      " (#{inspect(type)})",
+      tags_suffix(tags)
+    ]
+  end
+
+  defp tags_suffix(tags) when tags == %{}, do: ""
+
+  defp tags_suffix(tags) do
+    [" ", IO.ANSI.cyan(), "tags: #{inspect(tags)}", IO.ANSI.reset()]
+  end
+
+  defp explain({:unknown_metric, name}),
+    do: "No metric named #{inspect(name)} is being tracked. Try Mobius.metrics()."
+
+  defp explain({:ambiguous_type, name, types}),
+    do: "#{inspect(name)} has multiple types #{inspect(types)}; pass one with type:."
+
+  defp explain(:summary_not_plottable),
+    do:
+      "Summary metrics are not plottable directly. Plot a field with " <>
+        "type: {:summary, :average}, or use Mobius.current/2 for the histogram."
 end

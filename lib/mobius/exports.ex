@@ -14,7 +14,6 @@ defmodule Mobius.Exports do
   a format that other services can parse and use. For more details see `mbf/1`.
   """
 
-  alias Mobius.Asciichart
   alias Mobius.Data.Metrics
   alias Mobius.Exports.{CSV, MobiusBinaryFormat, UnsupportedMetricError}
 
@@ -214,29 +213,9 @@ defmodule Mobius.Exports do
   end
 
   def plot(metric_name, type, tags, opts) do
-    series = series(metric_name, type, tags, opts)
-
-    case Asciichart.plot(series, height: 12) do
-      {:ok, plot} ->
-        chart = [
-          "\t\t",
-          IO.ANSI.yellow(),
-          "Metric Name: ",
-          metric_name,
-          IO.ANSI.reset(),
-          ", ",
-          IO.ANSI.cyan(),
-          "Tags: #{inspect(tags)}",
-          IO.ANSI.reset(),
-          "\n\n",
-          plot
-        ]
-
-        IO.puts(chart)
-
-      error ->
-        error
-    end
+    # Deprecated: plotting now lives on the main `Mobius` module. This delegates
+    # so existing callers keep working until `Mobius.Exports` is removed.
+    Mobius.plot(metric_name, Keyword.merge(opts, type: type, tags: tags))
   end
 
   @type mfb_export_opt() :: {:out_dir, Path.t()} | export_opt()

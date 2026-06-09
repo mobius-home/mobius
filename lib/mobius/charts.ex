@@ -31,7 +31,8 @@ defmodule Mobius.Charts do
   back in the result so a caller can label axes without re-deriving it.
   """
 
-  alias Mobius.{Data, DDSketch, Scraper, Summary}
+  alias Mobius.{Data, DDSketch, Events, Registry, Scraper, Summary}
+  alias Telemetry.Metrics
 
   @default_window_seconds 180
   @max_history_seconds 60 * 86_400
@@ -336,6 +337,51 @@ defmodule Mobius.Charts do
       end
     end)
   end
+
+  @typedoc """
+  One entry in the list of metrics available to chart.
+
+    * `:metric` / `:type` / `:tags` - identity, ready to pass to the other
+      queries (`tags` is the list of configured tag keys)
+    * `:histogram?` - whether a `t:distribution/0` is available for this metric
+      (true only for summary metrics registered with histograms enabled)
+  """
+  @type metric_listing() :: %{
+          metric: Mobius.metric_name(),
+          type: metric_type(),
+          tags: [atom()],
+          histogram?: boolean()
+        }
+
+  @doc """
+  List the metrics an instance is configured to track.
+
+  Each entry carries the `metric`/`type`/`tags` needed to call the other
+  queries, plus `histogram?` so a caller knows whether `distribution/3` is
+  available. Sourced from the configured `Telemetry.Metrics` definitions, so
+  metrics that have not reported a value yet are still listed.
+
+      Mobius.Charts.list_metrics()
+      # => [%{metric: "vm.memory.total", type: :last_value, tags: [], histogram?: false}, ...]
+  """
+  @spec list_metrics(Mobius.instance()) :: [metric_listing()]
+  def list_metrics(instance \\ :mobius) do
+    instance
+    |> Registry.metrics()
+    |> Enum.map(fn metric ->
+      %{
+        metric: Enum.join(metric.name, "."),
+        type: metric_type(metric),
+        tags: metric.tags,
+        histogram?: Events.histogram_opts(metric) != nil
+      }
+    end)
+  end
+
+  defp metric_type(%Metrics.Counter{}), do: :counter
+  defp metric_type(%Metrics.LastValue{}), do: :last_value
+  defp metric_type(%Metrics.Sum{}), do: :sum
+  defp metric_type(%Metrics.Summary{}), do: :summary
 
   # ----------------------------------------------------------------- helpers
 
