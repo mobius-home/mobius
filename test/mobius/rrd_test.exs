@@ -196,6 +196,23 @@ defmodule Mobius.RRDTest do
       assert RRD.load(RRD.new(@args), rrd_binary, histogram_configs: %{}) == {:ok, expected_rrd}
     end
 
+    test "refuses to save with a non-current serialization version" do
+      # save/2 performs no down-conversion, so writing current-shape data
+      # under an old version byte would produce a file that load/3 rejects
+      # as corrupt. save/2 must refuse instead of emitting an unloadable file.
+      rrd =
+        RRD.new(@args)
+        |> RRD.insert(1234, {[{"vm.memory.total", :last_value, 123, %{}}], %{}})
+
+      assert_raise ArgumentError, fn ->
+        RRD.save(rrd, serialization_version: 1)
+      end
+
+      assert_raise ArgumentError, fn ->
+        RRD.save(rrd, serialization_version: 2)
+      end
+    end
+
     test "compression_level changes the payload size but round-trips either way" do
       # redundant data so compression has something to work with
       rrd =
