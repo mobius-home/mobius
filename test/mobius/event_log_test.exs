@@ -50,6 +50,22 @@ defmodule Mobius.EventLogTest do
     assert event_log == events
   end
 
+  test "parse/1 returns an error tuple for a corrupt v1 payload" do
+    assert {:error, _reason} = EventLog.parse(<<0x01, 255, 254, 253, 252>>)
+  end
+
+  test "parse/1 rejects a v1 payload that is not a list of events" do
+    assert {:error, _reason} = EventLog.parse(<<0x01, :erlang.term_to_binary(:boom)::binary>>)
+  end
+
+  @tag capture_log: true
+  test "parse/1 drops entries that are not the current Event struct" do
+    event = Event.new("test", "a.b.c", %{a: 1}, %{}, timestamp: 1)
+    bin = <<0x01, :erlang.term_to_binary([event, %{not: :an_event}, :junk])::binary>>
+
+    assert {:ok, [^event]} = EventLog.parse(bin)
+  end
+
   @tag :tmp_dir
   test "save persists the event log so a fresh instance restores it", %{tmp_dir: tmp_dir} do
     instance = :event_log_roundtrip
@@ -138,6 +154,21 @@ defmodule Mobius.EventLogTest do
       logged_events = EventLog.list(instance: :filter_event_to, to: 50)
 
       assert logged_events == Enum.take(events, 2)
+    end
+
+    @tag :tmp_dir
+    test "filter by group", %{tmp_dir: tmp_dir} do
+      events = [
+        Event.new("test", "a.b.c", %{a: 1}, %{}, group: :network, timestamp: 1),
+        Event.new("test", "d.e.f", %{a: 1}, %{}, timestamp: 2),
+        Event.new("test", "g.h.i", %{a: 1}, %{}, group: :network, timestamp: 3)
+      ]
+
+      load_event_log(:filter_event_group, tmp_dir, events)
+
+      logged_events = EventLog.list(instance: :filter_event_group, group: :network)
+
+      assert logged_events == [List.first(events), List.last(events)]
     end
 
     @tag :tmp_dir

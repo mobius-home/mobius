@@ -3,11 +3,12 @@ defmodule Mobius.Scraper do
 
   use GenServer
 
-  alias Mobius.{Events, MetricsTable, RRD}
+  alias Mobius.{Events, MetricsTable, Persistence, RRD}
 
   require Logger
 
   @interval 1_000
+  @file_name "history"
 
   @doc """
   Start the scraper server
@@ -18,7 +19,7 @@ defmodule Mobius.Scraper do
   end
 
   defp name(mobius_instance) do
-    Module.concat(__MODULE__, mobius_instance)
+    {:via, Registry, {Mobius.ProcessRegistry, {__MODULE__, mobius_instance}}}
   end
 
   @typedoc """
@@ -118,7 +119,7 @@ defmodule Mobius.Scraper do
   end
 
   defp file(state) do
-    Path.join(state.persistence_dir, "history")
+    Path.join(state.persistence_dir, @file_name)
   end
 
   @typedoc """
@@ -282,37 +283,20 @@ defmodule Mobius.Scraper do
     save_to_persistence(state)
   end
 
-  # Write our database to persistent storage. Write-to-tmp + fsync + rename so a
-  # power cut mid-write leaves the previous file intact instead of a truncated one
-  # the next boot cannot load (and would then overwrite on its first autosave).
-  # The persistence directory may have been unavailable at boot (or gone away
-  # since), so re-create it on every attempt.
+  # Write our database to persistent storage. See Mobius.Persistence for the
+  # write-to-tmp + fsync + rename details.
   defp save_to_persistence(state) do
-    path = file(state)
-    tmp = path <> ".tmp"
-
     contents =
       RRD.save(state.database,
         histogram_configs: state.histogram_configs,
         compression_level: state.compression_level
       )
 
-    _ = File.mkdir_p(state.persistence_dir)
-
-    result =
-      with {:ok, fd} <- File.open(tmp, [:write, :binary]),
-           :ok <- IO.binwrite(fd, contents),
-           :ok <- :file.sync(fd),
-           :ok <- File.close(fd) do
-        File.rename(tmp, path)
-      end
-
-    case result do
+    case Persistence.write_atomic(state.persistence_dir, @file_name, contents) do
       :ok ->
         :ok
 
       error ->
-        _ = File.rm(tmp)
         Logger.warning("Failed to save metrics history because #{inspect(error)}")
 
         error

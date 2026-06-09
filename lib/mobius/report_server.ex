@@ -17,7 +17,7 @@ defmodule Mobius.ReportServer do
   end
 
   defp name(instance) do
-    Module.concat(__MODULE__, instance)
+    {:via, Registry, {Mobius.ProcessRegistry, {__MODULE__, instance}}}
   end
 
   @doc """
@@ -62,22 +62,25 @@ defmodule Mobius.ReportServer do
   end
 
   defp get_query_window(%{events_next_start: nil}, :events) do
-    {0, now()}
+    {0, last_closed_second()}
   end
 
   defp get_query_window(state, :events) do
-    {state.events_next_start, now()}
+    {state.events_next_start, last_closed_second()}
   end
 
   defp get_query_window(%{metrics_next_start: nil}, :metrics) do
-    {0, now()}
+    {0, last_closed_second()}
   end
 
   defp get_query_window(state, :metrics) do
-    {state.metrics_next_start, now()}
+    {state.metrics_next_start, last_closed_second()}
   end
 
-  defp now() do
-    System.system_time(:second)
+  # Only query up to the previous (closed) second. Records can still land in
+  # the current second after this query has run, and since the next window
+  # starts at `to + 1` they would be skipped permanently.
+  defp last_closed_second() do
+    System.system_time(:second) - 1
   end
 end

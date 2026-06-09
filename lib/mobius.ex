@@ -52,8 +52,9 @@ defmodule Mobius do
   * `:name` - the name of the mobius instance (defaults to `:mobius`)
   * `:metrics` - list of telemetry metrics for Mobius to track
   * `:persistence_dir` - the top level directory where mobius will persist
-  * `:autosave_interval` - time in seconds between automatic writes of the
-     persistence data (default disabled) metric information
+  * `:autosave_interval` - time in seconds (a positive integer) between
+     automatic writes of the persistence data (default disabled) metric
+     information
   * `:compression_level` - the zlib level (`0..9`) used when compressing
      persisted metric history and event log data. Higher levels trade more CPU
      at save time for smaller files. Defaults to `9` (maximum compression). `0`
@@ -140,7 +141,7 @@ defmodule Mobius do
   end
 
   defp name(instance) do
-    Module.concat(__MODULE__.Supervisor, instance)
+    {:via, Registry, {Mobius.ProcessRegistry, {__MODULE__, instance}}}
   end
 
   @impl Supervisor
@@ -204,10 +205,23 @@ defmodule Mobius do
   end
 
   defp maybe_enable_autosave(children, args) do
-    if is_number(args[:autosave_interval]) and args[:autosave_interval] > 0 do
-      children ++ [{Mobius.AutoSave, args}]
-    else
-      children
+    case args[:autosave_interval] do
+      nil ->
+        children
+
+      interval when is_integer(interval) and interval > 0 ->
+        children ++ [{Mobius.AutoSave, args}]
+
+      invalid ->
+        # A float would make :timer.send_interval/3 return {:error, :badarg},
+        # silently disabling autosave while looking enabled — reject anything
+        # but a positive integer up front, but don't prevent boot over it.
+        Logger.warning(
+          "[Mobius] ignoring invalid autosave_interval #{inspect(invalid)}; " <>
+            "expected a positive integer number of seconds, autosave is disabled"
+        )
+
+        children
     end
   end
 

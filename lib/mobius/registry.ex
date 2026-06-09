@@ -28,7 +28,7 @@ defmodule Mobius.Registry do
   end
 
   defp name(instance) do
-    Module.concat(__MODULE__, instance)
+    {:via, Registry, {Mobius.ProcessRegistry, {__MODULE__, instance}}}
   end
 
   @doc """
@@ -112,22 +112,28 @@ defmodule Mobius.Registry do
 
   @impl GenServer
   def handle_continue(:update_metrics_table, state) do
+    metric_specs =
+      Enum.map(state.metrics, &{&1.name, metric_as_type(&1), Enum.sort(&1.tags)})
+
     state.table
     |> MetricsTable.get_entries()
-    |> Enum.each(&maybe_remove_entry(&1, state))
+    |> Enum.each(&maybe_remove_entry(&1, metric_specs, state.table))
 
     {:noreply, state}
   end
 
-  defp maybe_remove_entry({_name, {:hist, _region, _idx}, _value, _meta}, _state), do: :ok
-  defp maybe_remove_entry({_name, {:hist, :zero}, _value, _meta}, _state), do: :ok
+  defp maybe_remove_entry({_name, {:hist, _region, _idx}, _value, _meta}, _specs, _table), do: :ok
+  defp maybe_remove_entry({_name, {:hist, :zero}, _value, _meta}, _specs, _table), do: :ok
 
-  defp maybe_remove_entry({metric_name, metric_type, _value, meta}, state) do
-    metric_specs = Enum.map(state.metrics, &{&1.name, metric_as_type(&1), &1.tags})
-    entry_spec = {metric_name, metric_type, Map.keys(meta)}
+  defp maybe_remove_entry({metric_name, metric_type, _value, meta}, metric_specs, table) do
+    # Entries from the table carry string names while the table itself (and
+    # the configured metrics) use atom lists, so parse the name back before
+    # comparing and removing.
+    name = parse_event_name(metric_name)
+    entry_spec = {name, metric_type, meta |> Map.keys() |> Enum.sort()}
 
     if !Enum.member?(metric_specs, entry_spec) do
-      MetricsTable.remove(state.table, metric_name, metric_type, meta)
+      MetricsTable.remove(table, name, metric_type, meta)
     end
   end
 

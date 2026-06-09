@@ -5,13 +5,24 @@ defmodule Mobius.EventLog do
 
   alias Mobius.{Event, EventsServer}
 
+  require Logger
+
   @event_log_binary_format_version 1
   @default_compression_level 9
 
   @typedoc """
   Options to query the event log
+
+  * `:from` - the unix timestamp (in seconds) to start listing events from
+  * `:to` - the unix timestamp (in seconds) to list events until
+  * `:instance` - the Mobius instance to query (defaults to `:mobius`)
+  * `:group` - only list events that belong to this event group
   """
-  @type opt() :: {:from, integer()} | {:to, integer()} | {:instance, Mobius.instance()}
+  @type opt() ::
+          {:from, integer()}
+          | {:to, integer()}
+          | {:instance, Mobius.instance()}
+          | {:group, atom()}
 
   @doc """
   List the events in the event log
@@ -81,10 +92,34 @@ defmodule Mobius.EventLog do
   """
   @spec parse(binary()) :: {:ok, [Event.t()]} | {:error, atom()}
   def parse(<<0x01, event_log_bin::binary>>) do
-    {:ok, :erlang.binary_to_term(event_log_bin)}
+    case :erlang.binary_to_term(event_log_bin) do
+      events when is_list(events) ->
+        {:ok, drop_invalid_events(events)}
+
+      _other ->
+        {:error, :corrupt_event_log}
+    end
+  rescue
+    ArgumentError -> {:error, :corrupt_event_log}
   end
 
   def parse(_binary) do
     {:error, :invalid_binary_format}
   end
+
+  # Entries recorded under a different `Event` struct shape (or damaged on
+  # disk) decode to terms that no longer match the current struct, so drop
+  # them rather than letting them crash callers downstream.
+  defp drop_invalid_events(events) do
+    {valid, invalid} = Enum.split_with(events, &valid_event?/1)
+
+    if invalid != [] do
+      Logger.warning("[Mobius] Dropping #{length(invalid)} invalid persisted event log entries")
+    end
+
+    valid
+  end
+
+  defp valid_event?(%Event{} = event), do: Map.keys(event) == Map.keys(%Event{})
+  defp valid_event?(_other), do: false
 end

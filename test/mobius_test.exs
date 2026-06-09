@@ -7,6 +7,7 @@ defmodule MobiusTest do
     persistence_dir: @persistence_dir,
     metrics: []
   ]
+  @default_instance :mobius
   @default_instance_str "mobius"
 
   setup do
@@ -26,6 +27,21 @@ defmodule MobiusTest do
     assert capture_log(fn ->
              assert {:ok, _pid} = start_supervised({Mobius, @default_args})
            end) =~ "Unable to load data because of :unsupported_version"
+  end
+
+  @tag capture_log: true
+  @tag :tmp_dir
+  test "does not crash with a corrupt event log file", %{tmp_dir: tmp_dir} do
+    persistence_path = Path.join(tmp_dir, @default_instance_str)
+    File.mkdir_p!(persistence_path)
+
+    # A valid version byte followed by a payload that does not decode as a term
+    File.write!(Path.join(persistence_path, "event_log"), <<0x01, 255, 254, 253, 252>>)
+
+    assert {:ok, _pid} = start_supervised({Mobius, persistence_dir: tmp_dir, metrics: []})
+
+    # The corrupt log is dropped and the instance starts with an empty event log
+    assert Mobius.EventLog.list() == []
   end
 
   @tag capture_log: true
@@ -51,12 +67,12 @@ defmodule MobiusTest do
     persistence_path = Path.join(@persistence_dir, @default_instance_str)
     {:ok, _pid} = start_supervised({Mobius, @default_args})
 
-    assert :ok = Mobius.save(@default_instance_str)
+    assert :ok = Mobius.save(@default_instance)
     File.rm_rf!(persistence_path)
 
     # Writability can come and go — every save attempt re-creates the
     # directory, so persistence recovers on its own.
-    assert :ok = Mobius.save(@default_instance_str)
+    assert :ok = Mobius.save(@default_instance)
     assert File.exists?(Path.join(persistence_path, "history"))
   end
 
@@ -112,7 +128,7 @@ defmodule MobiusTest do
     persistence_path = Path.join(@persistence_dir, @default_instance_str)
     {:ok, _pid} = start_supervised({Mobius, @default_args})
 
-    assert :ok = Mobius.save(@default_instance_str)
+    assert :ok = Mobius.save(@default_instance)
     assert File.exists?(Path.join(persistence_path, "history"))
     assert File.exists?(Path.join(persistence_path, "metrics_table"))
   end
@@ -126,6 +142,20 @@ defmodule MobiusTest do
     Process.sleep(1_100)
     assert File.exists?(Path.join(persistence_path, "history"))
     assert File.exists?(Path.join(persistence_path, "metrics_table"))
+  end
+
+  test "a non-integer autosave_interval disables autosave with a warning" do
+    log =
+      capture_log(fn ->
+        assert {:ok, _pid} = start_supervised({Mobius, @default_args ++ [autosave_interval: 1.5]})
+      end)
+
+    assert log =~ "autosave_interval"
+
+    # The AutoSave server must not be started at all — a float interval makes
+    # :timer.send_interval/3 return {:error, :badarg}, silently disabling
+    # autosave while looking enabled.
+    refute Process.whereis(Module.concat(Mobius.AutoSave, :mobius))
   end
 
   describe "remove_all_data/1" do

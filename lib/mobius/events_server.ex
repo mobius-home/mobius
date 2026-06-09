@@ -3,7 +3,7 @@ defmodule Mobius.EventsServer do
 
   use GenServer
 
-  alias Mobius.{Event, EventLog, TimeServer}
+  alias Mobius.{Event, EventLog, Persistence, TimeServer}
 
   require Logger
 
@@ -19,7 +19,7 @@ defmodule Mobius.EventsServer do
   end
 
   defp name(instance) do
-    Module.concat(__MODULE__, instance)
+    {:via, Registry, {Mobius.ProcessRegistry, {__MODULE__, instance}}}
   end
 
   @doc """
@@ -90,7 +90,15 @@ defmodule Mobius.EventsServer do
         CircularBuffer.insert(buff, event)
       end)
     else
-      _ ->
+      {:error, :enoent} ->
+        # Event log file doesn't (yet) exist
+        CircularBuffer.new(log_size)
+
+      {:error, reason} ->
+        Logger.warning(
+          "[Mobius] Could not recover event log from file because #{inspect(reason)}"
+        )
+
         CircularBuffer.new(log_size)
     end
   end
@@ -192,12 +200,14 @@ defmodule Mobius.EventsServer do
   defp make_list(buffer, opts) do
     from = opts[:from] || 0
     to = opts[:to] || System.system_time(:second)
+    group = opts[:group]
 
     buffer
     |> CircularBuffer.to_list()
     |> Enum.sort_by(fn event -> event.timestamp end)
     |> Enum.filter(fn event ->
-      event.timestamp >= from && event.timestamp <= to
+      event.timestamp >= from && event.timestamp <= to &&
+        (group == nil || event.group == group)
     end)
   end
 
@@ -206,29 +216,12 @@ defmodule Mobius.EventsServer do
   end
 
   defp do_save(binary, state) do
-    # Write-to-tmp + fsync + rename so a power cut mid-write leaves the
-    # previous event log intact instead of a truncated one. The persistence
-    # directory may have been unavailable at boot (or gone away since), so
-    # re-create it on every attempt — saving recovers as soon as the
-    # filesystem allows.
-    _ = File.mkdir_p(state.persistence_dir)
-    path = make_file_path(state.persistence_dir)
-    tmp = path <> ".tmp"
-
-    result =
-      with {:ok, fd} <- File.open(tmp, [:write, :binary]),
-           :ok <- IO.binwrite(fd, binary),
-           :ok <- :file.sync(fd),
-           :ok <- File.close(fd) do
-        File.rename(tmp, path)
-      end
-
-    case result do
+    # See Mobius.Persistence for the write-to-tmp + fsync + rename details.
+    case Persistence.write_atomic(state.persistence_dir, @file_name, binary) do
       :ok ->
         :ok
 
       {:error, reason} ->
-        _ = File.rm(tmp)
         Logger.warning("[Mobius]: unable to save event log: #{inspect(reason)}")
         :ok
     end
