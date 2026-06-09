@@ -96,7 +96,7 @@ defmodule Mobius.FileError do
     %__MODULE__{
       error: error,
       message:
-        "Could not #{inspect(operation)} file #{inspect(file)} for reason: {inspect(error)}",
+        "Could not #{inspect(operation)} file #{inspect(file)} for reason: #{inspect(error)}",
       file: file,
       operation: operation
     }

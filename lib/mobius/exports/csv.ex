@@ -10,7 +10,7 @@ defmodule Mobius.Exports.CSV do
   @doc """
   Export metrics to a CSV
   """
-  @spec export_metrics([Mobius.metric()], [export_opt()]) :: :ok | String.t()
+  @spec export_metrics([Mobius.metric()], [export_opt()]) :: :ok | {:ok, binary()}
   def export_metrics(metrics, opts \\ []) do
     tag_names = Keyword.fetch!(opts, :tags)
     metric_name = Keyword.fetch!(opts, :metric_name)
@@ -18,7 +18,9 @@ defmodule Mobius.Exports.CSV do
     headers = make_csv_headers(tag_names, opts)
     rows = format_metrics_as_csv(metrics, metric_name, tag_names)
 
-    write_csv([headers | rows], opts)
+    csv_rows = if headers == [], do: rows, else: [headers | rows]
+
+    write_csv(csv_rows, opts)
   end
 
   defp make_csv_headers(extra_tag_headers, opts) do
@@ -53,13 +55,25 @@ defmodule Mobius.Exports.CSV do
   defp write_csv(csv_content, opts) do
     case opts[:iodevice] do
       nil ->
-        {:ok,
-         csv_content
-         |> Enum.map_join("\n", &Enum.join(&1, ","))
-         |> String.trim("\n")}
+        {:ok, Enum.map_join(csv_content, "\n", &format_row/1)}
 
       device ->
-        Enum.each(csv_content, fn row -> IO.write(device, [Enum.intersperse(row, ","), "\n"]) end)
+        Enum.each(csv_content, fn row -> IO.write(device, [format_row(row), "\n"]) end)
+    end
+  end
+
+  defp format_row(row) do
+    Enum.map_join(row, ",", &escape_field/1)
+  end
+
+  # RFC 4180-style quoting: fields containing the separator, a double quote,
+  # or a line break are wrapped in double quotes, with embedded double quotes
+  # doubled.
+  defp escape_field(field) do
+    if String.contains?(field, [",", "\"", "\n", "\r"]) do
+      "\"" <> String.replace(field, "\"", "\"\"") <> "\""
+    else
+      field
     end
   end
 end

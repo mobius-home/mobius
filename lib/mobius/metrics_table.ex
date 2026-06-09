@@ -168,8 +168,13 @@ defmodule Mobius.MetricsTable do
     path = Path.join(persistence_dir, "metrics_table")
     tmp = path <> ".tmp"
 
-    with :ok <- :ets.tab2file(instance, String.to_charlist(tmp), sync: true) do
-      File.rename(tmp, path)
+    with :ok <- :ets.tab2file(instance, String.to_charlist(tmp), sync: true),
+         :ok <- File.rename(tmp, path) do
+      :ok
+    else
+      error ->
+        _ = File.rm(tmp)
+        error
     end
   end
 
