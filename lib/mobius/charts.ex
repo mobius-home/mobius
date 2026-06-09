@@ -140,12 +140,15 @@ defmodule Mobius.Charts do
 
   @typedoc """
   The most recent stored value for one metric.
+
+  `value` is a number for plain types and summary fields; for the plain
+  `:summary` type it is the calculated `%{average:, std_dev:, reports:}` map.
   """
   @type latest_value() :: %{
           metric: Mobius.metric_name(),
           type: metric_type(),
           tags: map(),
-          value: number(),
+          value: number() | map(),
           timestamp: integer()
         }
 
