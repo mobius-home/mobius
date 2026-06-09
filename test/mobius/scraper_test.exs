@@ -42,8 +42,8 @@ defmodule Mobius.ScraperTest do
 
     {_pid, ^instance} = start_scraper(instance, persistence_dir, RRD.new(@rrd_args))
 
-    # The boot-time scrape captures the table right away; the first timer
-    # tick would otherwise only land after a full interval (1 s by default).
+    # Well under the 1 s first timer tick, so only the boot-time scrape
+    # can satisfy this.
     records = poll_for_records(instance, 500)
 
     assert [{_ts, {"scrape.immediate.test", :last_value, 42, %{}}} | _rest] = records
@@ -61,8 +61,6 @@ defmodule Mobius.ScraperTest do
         {_pid, ^instance} =
           start_scraper(instance, persistence_dir, RRD.new(@rrd_args), scrape_interval: 50)
 
-        # Data still appears promptly — from the boot-time scrape, not from
-        # sub-second ticking, which the RRD would drop anyway.
         assert [_ | _] = poll_for_records(instance, 500)
       end)
 

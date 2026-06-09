@@ -10,9 +10,8 @@ defmodule Mobius.Scraper do
   @default_interval 1_000
   @file_name "history"
 
-  # The RRD keys snapshots by unix second and drops a second snapshot for the
-  # same second, so scraping faster than once a second only builds snapshots
-  # that get thrown away. Sub-second intervals clamp to this floor.
+  # The RRD stores at most one snapshot per second, so sub-second scraping
+  # only builds snapshots that get dropped.
   @min_interval 1_000
 
   @doc """
@@ -62,8 +61,7 @@ defmodule Mobius.Scraper do
   @impl GenServer
   def init(args) do
     _ = :timer.send_interval(scrape_interval(args[:scrape_interval]), self(), :scrape)
-    # Capture a snapshot right away instead of waiting out the first interval,
-    # so a freshly booted instance has data as soon as metrics arrive.
+    # A fresh boot gets a data point right away, not a full interval later.
     send(self(), :scrape)
     Process.flag(:trap_exit, true)
 
