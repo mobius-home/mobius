@@ -11,13 +11,14 @@ any time. The public API SHOULD NOT be considered stable.
 
 ### Added
 
-* `Mobius.reset/0` and `Mobius.reset/1` to clear everything out and return
-  Mobius to a clean state without a restart: the in-memory metrics table,
-  the accumulated history (RRD), the event log, and the persisted files on
-  disk (`history`, `metrics_table`, and `event_log`). Configured metrics
-  and events keep being tracked, so collection resumes immediately. Useful
-  when repurposing a device whose historical data is no longer meaningful,
-  or while debugging and developing.
+* `Mobius.remove_all_data/0` and `Mobius.remove_all_data/1` to clear
+  everything out and return Mobius to a clean state without a restart: the
+  in-memory metrics table, the accumulated history (RRD), the event log,
+  and the persisted files on disk (`history`, `metrics_table`, and
+  `event_log`). Configured metrics and events keep being tracked, so
+  collection resumes immediately. Useful when repurposing a device whose
+  historical data is no longer meaningful, or while debugging and
+  developing.
 * DDSketch-backed histograms on `summary`-type metrics. Opt in per
   metric via `reporter_options: [histogram: [...]]` to get percentiles
   (P50/P95/P99), SLO-style "% under threshold" counts, and

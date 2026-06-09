@@ -27,8 +27,8 @@ defmodule Mobius.MetricsTable.Monitor do
   @doc """
   Clear all metrics and remove the persisted metrics table file
   """
-  @spec reset(Mobius.instance()) :: :ok
-  def reset(instance), do: GenServer.call(name(instance), :reset)
+  @spec remove_all_data(Mobius.instance()) :: :ok
+  def remove_all_data(instance), do: GenServer.call(name(instance), :remove_all_data)
 
   @impl GenServer
   def init(args) do
@@ -47,8 +47,8 @@ defmodule Mobius.MetricsTable.Monitor do
     {:reply, save_to_persistence(state), state}
   end
 
-  def handle_call(:reset, _from, state) do
-    {:reply, MetricsTable.reset(state.mobius_instance, state.persistence_dir), state}
+  def handle_call(:remove_all_data, _from, state) do
+    {:reply, MetricsTable.remove_all_data(state.mobius_instance, state.persistence_dir), state}
   end
 
   @impl GenServer

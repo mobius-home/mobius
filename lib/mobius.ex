@@ -289,7 +289,7 @@ defmodule Mobius do
   end
 
   @doc """
-  Reset Mobius back to a clean state
+  Remove all data, returning Mobius to a clean state
 
   This clears everything out for the instance without requiring a restart:
 
@@ -306,15 +306,15 @@ defmodule Mobius do
   discarded — so Mobius starts collecting fresh data immediately.
 
   If you configured Mobius to use a different name then you can pass in your
-  custom name to ensure the right instance is reset.
+  custom name to ensure the data is removed from the right instance.
   """
-  @spec reset() :: :ok
-  def reset(), do: reset(@default_args[:mobius_instance])
+  @spec remove_all_data() :: :ok
+  def remove_all_data(), do: remove_all_data(@default_args[:mobius_instance])
 
-  @spec reset(instance()) :: :ok
-  def reset(instance) do
-    :ok = Scraper.reset(instance)
-    :ok = MetricsTable.Monitor.reset(instance)
+  @spec remove_all_data(instance()) :: :ok
+  def remove_all_data(instance) do
+    :ok = Scraper.remove_all_data(instance)
+    :ok = MetricsTable.Monitor.remove_all_data(instance)
     :ok = EventLog.clear(instance: instance)
 
     :ok

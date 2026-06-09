@@ -183,8 +183,8 @@ defmodule Mobius.MetricsTable do
   so a later save (or the save on shutdown) does not resurrect the cleared
   data.
   """
-  @spec reset(Mobius.instance(), Path.t()) :: :ok
-  def reset(instance, persistence_dir) do
+  @spec remove_all_data(Mobius.instance(), Path.t()) :: :ok
+  def remove_all_data(instance, persistence_dir) do
     configs =
       case :ets.lookup(instance, @histogram_configs_key) do
         [{@histogram_configs_key, configs}] -> configs
