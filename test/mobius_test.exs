@@ -154,8 +154,9 @@ defmodule MobiusTest do
 
     # The AutoSave server must not be started at all — a float interval makes
     # :timer.send_interval/3 return {:error, :badarg}, silently disabling
-    # autosave while looking enabled.
-    refute Process.whereis(Module.concat(Mobius.AutoSave, :mobius))
+    # autosave while looking enabled. AutoSave registers through the process
+    # registry, so look it up there (Process.whereis would always be nil).
+    assert Registry.lookup(Mobius.ProcessRegistry, {Mobius.AutoSave, :mobius}) == []
   end
 
   describe "remove_all_data/1" do
