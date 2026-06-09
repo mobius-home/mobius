@@ -53,7 +53,7 @@ defmodule Mobius.Summary do
     }
   end
 
-  defp std_dev(_sum, _sum_sqrd, 1), do: 0
+  defp std_dev(_sum, _sum_sqrd, 1), do: 0.0
 
   # Naive algorithm. See Wikipedia. Clamp the operand at 0 before sqrt: the
   # naive sum-of-squares variance can lose precision and go slightly negative
