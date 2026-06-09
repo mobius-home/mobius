@@ -94,7 +94,10 @@ defmodule Mobius.Scraper do
   defp load_data(database, state) do
     with {:ok, contents} <- File.read(file(state)),
          {:ok, rrd} <-
-           RRD.load(database, contents, histogram_configs: state.histogram_configs) do
+           RRD.load(database, contents,
+             histogram_configs: state.histogram_configs,
+             now: System.system_time(:second)
+           ) do
       rrd
     else
       {:error, :enoent} ->

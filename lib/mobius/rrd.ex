@@ -34,6 +34,10 @@ defmodule Mobius.RRD do
 
   @serialization_version 3
   @default_compression_level 9
+  # How far ahead of "now" a persisted entry may be stamped before load
+  # discards it. Generous enough for benign clock skew, far below the
+  # months-to-decades jumps of a dead RTC battery.
+  @future_tolerance 5 * 60
 
   require Logger
 
@@ -198,8 +202,15 @@ defmodule Mobius.RRD do
     under a different configuration, so reinterpreting them would produce
     silently wrong quantiles. When omitted, no compatibility check is
     performed.
+  * `:now` - the current POSIX timestamp in seconds, defaults to
+    `System.system_time(:second)`. Persisted entries stamped more than a
+    few minutes after this are discarded: they were recorded under a
+    wrong-ahead clock (e.g. a dead RTC battery before NTP sync) and would
+    otherwise push the high-water marks past the present, silently
+    blocking all new inserts until wall-clock catches up.
   """
-  @type load_opt() :: {:histogram_configs, %{histogram_config_key() => map()}}
+  @type load_opt() ::
+          {:histogram_configs, %{histogram_config_key() => map()}} | {:now, integer()}
 
   @doc """
   Load persisted data back into a TimeLayerBuffer
@@ -209,20 +220,22 @@ defmodule Mobius.RRD do
   @spec load(t(), binary(), [load_opt()]) :: {:ok, t()} | {:error, Mobius.DataLoadError.t()}
   def load(rrd, binary, opts \\ [])
 
-  def load(rrd, <<1, data::binary>>, _opts) do
+  def load(rrd, <<1, data::binary>>, opts) do
     data
     |> :erlang.binary_to_term()
     |> migrate_data(1)
     |> migrate_data(2)
+    |> drop_future_entries(load_now(opts))
     |> do_load(rrd)
   catch
     _, _ -> {:error, Mobius.DataLoadError.exception(reason: :corrupt, who: rrd)}
   end
 
-  def load(rrd, <<2, data::binary>>, _opts) do
+  def load(rrd, <<2, data::binary>>, opts) do
     data
     |> :erlang.binary_to_term()
     |> migrate_data(2)
+    |> drop_future_entries(load_now(opts))
     |> do_load(rrd)
   catch
     _, _ -> {:error, Mobius.DataLoadError.exception(reason: :corrupt, who: rrd)}
@@ -232,6 +245,7 @@ defmodule Mobius.RRD do
     %{configs: persisted_configs, data: snapshots} = :erlang.binary_to_term(data)
 
     snapshots
+    |> drop_future_entries(load_now(opts))
     |> sanitize_histograms(persisted_configs, opts[:histogram_configs])
     |> do_load(rrd)
   catch
@@ -240,6 +254,31 @@ defmodule Mobius.RRD do
 
   def load(rrd, _, _opts) do
     {:error, Mobius.DataLoadError.exception(reason: :unsupported_version, who: rrd)}
+  end
+
+  defp load_now(opts), do: opts[:now] || System.system_time(:second)
+
+  # Discard persisted entries stamped in the future. They were recorded
+  # under a wrong-ahead clock that has since been stepped back (e.g. by
+  # NTP after a boot with a dead RTC battery); keeping them would rebuild
+  # the `*_next` high-water marks past the present and insert/3 would
+  # silently drop every new scrape until wall-clock catches up. The
+  # guarded clause leaves non-integer timestamps to raise, so corrupt
+  # data is still reported as such.
+  defp drop_future_entries(data, now) do
+    limit = now + @future_tolerance
+
+    {kept, dropped} =
+      Enum.split_with(data, fn {ts, _} when is_integer(ts) -> ts <= limit end)
+
+    if dropped != [] do
+      Logger.warning(
+        "Dropping #{length(dropped)} persisted metric snapshot(s) with future timestamps" <>
+          " - the clock may have moved backwards since they were recorded"
+      )
+    end
+
+    kept
   end
 
   # Walk every persisted histogram entry and drop the ones that cannot be
