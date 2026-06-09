@@ -46,7 +46,10 @@ defmodule Mobius.RRD do
             hour_next: integer(),
             minute_next: integer(),
             second_next: integer(),
-            day_capacity: pos_integer()
+            day_capacity: pos_integer(),
+            hour_capacity: pos_integer(),
+            minute_capacity: pos_integer(),
+            second_capacity: pos_integer()
           }
 
   @typedoc """
@@ -96,7 +99,10 @@ defmodule Mobius.RRD do
       hour_next: 0,
       minute_next: 0,
       second_next: 0,
-      day_capacity: days
+      day_capacity: days,
+      hour_capacity: hours,
+      minute_capacity: minutes,
+      second_capacity: seconds
     }
   end
 
@@ -220,10 +226,10 @@ defmodule Mobius.RRD do
   # to zero — fresh-start semantics; the insert that follows re-establishes
   # them from ts.
   defp prune_future(rrd, ts) do
-    {day, dropped_day} = prune_buffer(rrd.day, ts)
-    {hour, dropped_hour} = prune_buffer(rrd.hour, ts)
-    {minute, dropped_minute} = prune_buffer(rrd.minute, ts)
-    {second, dropped_second} = prune_buffer(rrd.second, ts)
+    {day, dropped_day} = prune_buffer(rrd.day, rrd.day_capacity, ts)
+    {hour, dropped_hour} = prune_buffer(rrd.hour, rrd.hour_capacity, ts)
+    {minute, dropped_minute} = prune_buffer(rrd.minute, rrd.minute_capacity, ts)
+    {second, dropped_second} = prune_buffer(rrd.second, rrd.second_capacity, ts)
 
     dropped = dropped_day + dropped_hour + dropped_minute + dropped_second
 
@@ -245,12 +251,12 @@ defmodule Mobius.RRD do
     }
   end
 
-  defp prune_buffer(buffer, ts) do
+  defp prune_buffer(buffer, capacity, ts) do
     entries = CircularBuffer.to_list(buffer)
     kept = Enum.filter(entries, fn {entry_ts, _item} -> entry_ts <= ts end)
 
     rebuilt =
-      Enum.reduce(kept, CircularBuffer.new(buffer.max_size), fn entry, acc ->
+      Enum.reduce(kept, CircularBuffer.new(capacity), fn entry, acc ->
         CircularBuffer.insert(acc, entry)
       end)
 
