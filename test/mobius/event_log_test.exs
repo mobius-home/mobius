@@ -50,6 +50,10 @@ defmodule Mobius.EventLogTest do
     assert event_log == events
   end
 
+  test "parse/1 returns an error tuple for a corrupt v1 payload" do
+    assert {:error, _reason} = EventLog.parse(<<0x01, 255, 254, 253, 252>>)
+  end
+
   @tag :tmp_dir
   test "save persists the event log so a fresh instance restores it", %{tmp_dir: tmp_dir} do
     instance = :event_log_roundtrip
