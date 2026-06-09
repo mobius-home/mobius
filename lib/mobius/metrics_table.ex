@@ -25,6 +25,13 @@ defmodule Mobius.MetricsTable do
 
   @doc """
   Initialize the metrics table
+
+  Creating the table must never take the supervision tree down — Mobius is
+  observability, not the host application's purpose. A restored dump that
+  cannot be read, or any other failure, degrades to a fresh in-memory table
+  with a logged warning. The call is idempotent: if the named table already
+  exists (e.g. a supervisor restart re-ran `init/1` while the owner survived)
+  the existing table is reused rather than crashing on a duplicate name.
   """
   @spec init([Mobius.arg()]) :: Mobius.instance()
   def init(args) do
@@ -32,25 +39,65 @@ defmodule Mobius.MetricsTable do
     configs = Events.histogram_configs(args[:metrics] || [])
 
     table =
-      case read_table_from_file(args) do
-        {:ok, table} ->
-          reconcile_histogram_bins(table, configs)
-          table
-
-        {:error, :enoent} ->
-          # Metrics save file doesn't (yet) exist
-          :ets.new(table_name, [:named_table, :public, :set])
-
-        {:error, reason} ->
-          Logger.warning(
-            "[Mobius] Could not recover metrics from file because #{inspect(reason)}"
-          )
-
-          :ets.new(table_name, [:named_table, :public, :set])
+      if exists?(table_name) do
+        reconcile_histogram_bins(table_name, configs)
+        table_name
+      else
+        create_table(table_name, args, configs)
       end
 
-    :ets.insert(table, {@histogram_configs_key, configs})
+    insert_histogram_configs(table, configs)
     table
+  end
+
+  defp create_table(table_name, args, configs) do
+    case read_table_from_file(args) do
+      {:ok, table} ->
+        reconcile_histogram_bins(table, configs)
+        table
+
+      {:error, :enoent} ->
+        # Metrics save file doesn't (yet) exist
+        new_table(table_name)
+
+      {:error, reason} ->
+        Logger.warning("[Mobius] Could not recover metrics from file because #{inspect(reason)}")
+
+        new_table(table_name)
+    end
+  rescue
+    e ->
+      Logger.warning(
+        "[Mobius] Could not restore metrics table, starting empty: " <>
+          Exception.message(e)
+      )
+
+      new_table(table_name)
+  end
+
+  defp new_table(table_name) do
+    :ets.new(table_name, [:named_table, :public, :set])
+  end
+
+  # Inserting the config meta row can only fail if the table vanished between
+  # creation and now (a pathological race). Tolerate it: a missing config row
+  # just means histogram reconciliation treats restored bins as unverifiable.
+  defp insert_histogram_configs(table, configs) do
+    _ = :ets.insert(table, {@histogram_configs_key, configs})
+    :ok
+  rescue
+    ArgumentError -> :ok
+  end
+
+  @doc """
+  Check whether the metrics table currently exists
+
+  ETS calls against a table that was never created (or has gone away) raise,
+  so consumers can use this to guard access where a startup race is possible.
+  """
+  @spec exists?(Mobius.instance()) :: boolean()
+  def exists?(table) do
+    :ets.whereis(table) != :undefined
   end
 
   # Drop restored histogram bin rows whose sketch configuration no longer
@@ -150,7 +197,7 @@ defmodule Mobius.MetricsTable do
   def put(table, event_name, :last_value, value, meta) do
     key = make_key(event_name, :last_value, meta)
 
-    :ets.insert(table, {key, value})
+    _ = insert(table, {key, value})
 
     :ok
   end
@@ -167,12 +214,12 @@ defmodule Mobius.MetricsTable do
     key = make_key(metric_name, :summary, meta)
 
     summary =
-      case :ets.lookup(table, key) do
+      case lookup(table, key) do
         [{^key, last_summary}] -> Summary.update(last_summary, value)
-        [] -> Summary.new(value)
+        _ -> Summary.new(value)
       end
 
-    :ets.insert(table, {key, summary})
+    _ = insert(table, {key, summary})
 
     :ok
   end
@@ -186,6 +233,26 @@ defmodule Mobius.MetricsTable do
     default_spec = {position, 0}
 
     :ets.update_counter(table, key, update_spec, default_spec)
+  rescue
+    # The table can legitimately be absent during a startup race or after the
+    # owner restarted: degrade to a dropped write rather than crashing the
+    # caller (telemetry handlers run in the process that emitted the event).
+    ArgumentError -> :unavailable
+  end
+
+  # ETS writes raise ArgumentError when the table does not exist. Mobius is
+  # observability, so a missing table drops the write instead of taking down
+  # the calling process.
+  defp insert(table, object) do
+    :ets.insert(table, object)
+  rescue
+    ArgumentError -> false
+  end
+
+  defp lookup(table, key) do
+    :ets.lookup(table, key)
+  rescue
+    ArgumentError -> []
   end
 
   @doc """
@@ -196,9 +263,15 @@ defmodule Mobius.MetricsTable do
   def remove(table, metric_name, type, meta \\ %{}) do
     key = make_key(metric_name, type, meta)
 
-    true = :ets.delete(table, key)
+    _ = delete(table, key)
 
     :ok
+  end
+
+  defp delete(table, key) do
+    :ets.delete(table, key)
+  rescue
+    ArgumentError -> true
   end
 
   @doc """
@@ -259,11 +332,15 @@ defmodule Mobius.MetricsTable do
       }
     ]
 
-    table
-    |> :ets.select(ms)
-    |> Enum.map(fn {name, type, value, tags} ->
-      {normalized_name_to_string(name), type, value, tags}
-    end)
+    if exists?(table) do
+      table
+      |> :ets.select(ms)
+      |> Enum.map(fn {name, type, value, tags} ->
+        {normalized_name_to_string(name), type, value, tags}
+      end)
+    else
+      []
+    end
   end
 
   @doc """
@@ -271,21 +348,25 @@ defmodule Mobius.MetricsTable do
   """
   @spec get_entries_by_metric_name(Mobius.instance(), Mobius.metric_name()) :: [metric_entry()]
   def get_entries_by_metric_name(table, metric_name) do
-    normalized_name =
-      metric_name
-      |> String.split(".", trim: true)
-      |> Enum.map(&String.to_existing_atom/1)
+    if exists?(table) do
+      normalized_name =
+        metric_name
+        |> String.split(".", trim: true)
+        |> Enum.map(&String.to_existing_atom/1)
 
-    ms = [
-      {{{:"$1", :"$2", :"$3"}, :"$4"}, [{:==, :"$1", normalized_name}],
-       [{{:"$1", :"$2", :"$4", :"$3"}}]}
-    ]
+      ms = [
+        {{{:"$1", :"$2", :"$3"}, :"$4"}, [{:==, :"$1", normalized_name}],
+         [{{:"$1", :"$2", :"$4", :"$3"}}]}
+      ]
 
-    table
-    |> :ets.select(ms)
-    |> Enum.map(fn {name, type, value, tags} ->
-      {normalized_name_to_string(name), type, value, tags}
-    end)
+      table
+      |> :ets.select(ms)
+      |> Enum.map(fn {name, type, value, tags} ->
+        {normalized_name_to_string(name), type, value, tags}
+      end)
+    else
+      []
+    end
   end
 
   defp normalized_name_to_string(normalized_name) do

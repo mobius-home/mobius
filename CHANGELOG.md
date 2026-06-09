@@ -43,6 +43,12 @@ any time. The public API SHOULD NOT be considered stable.
 * Every declared tag is now recorded on each metric series, as `nil`
   when the event metadata lacks it, so a series' identity no longer
   depends on which keys a particular event happened to carry.
+* Metrics table access no longer crashes the caller when the table is
+  absent. Reads return empty and writes are dropped if the table was
+  never created or its owner restarted, and `MetricsTable.init/1` is now
+  idempotent (reuses an existing table and degrades a failed restore to
+  a fresh in-memory table) so a startup race or supervisor restart can
+  no longer take Mobius down.
 
 ### Removed
 
