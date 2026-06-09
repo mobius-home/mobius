@@ -39,6 +39,7 @@ defmodule Mobius.Data.Metrics do
       mobius_instance: mobius_instance,
       metric_name: metric_name,
       tags: tags,
+      type: type,
       opts: scraper_opts
     })
 

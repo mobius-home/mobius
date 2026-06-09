@@ -44,7 +44,7 @@ defmodule Mobius do
   @type event_opt() ::
           {:measurement_values, event_measurement_values()} | {:tags, [atom()]} | {:group, atom()}
 
-  @type event_def() :: [binary() | {binary(), keyword()}]
+  @type event_def() :: binary() | {binary(), keyword()}
 
   @typedoc """
   Arguments to Mobius
@@ -78,6 +78,7 @@ defmodule Mobius do
           {:mobius_instance, instance()}
           | {:metrics, [Metrics.t()]}
           | {:persistence_dir, binary()}
+          | {:autosave_interval, non_neg_integer() | nil}
           | {:compression_level, 0..9}
           | {:database, Mobius.RRD.t()}
           | {:events, [event_def()]}
@@ -280,8 +281,8 @@ defmodule Mobius do
 
         :telemetry.execute(
           prefix ++ [:exception],
-          %{reason: inspect(error), duration: duration},
-          %{instance: instance}
+          %{duration: duration},
+          %{instance: instance, reason: inspect(error)}
         )
 
         error

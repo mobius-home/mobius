@@ -13,10 +13,12 @@ defmodule Mobius.Events do
 
   * `:table` - the metrics table name used to store metrics
   * `:event_opts` - the list of options to configure the event
+  * `:session` - the session the event is recorded under
   """
   @type event_handler_config() :: %{
           table: Mobius.instance(),
-          metrics: [Metrics.t()]
+          event_opts: keyword(),
+          session: Mobius.session()
         }
 
   @typedoc """
