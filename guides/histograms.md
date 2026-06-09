@@ -46,7 +46,7 @@ histogram: [min_indexable_value: 0.1, max_indexable_value: 120.0, relative_accur
 
 DDSketch bin density is logarithmic — at α=0.01 a bin near 1 fps is
 ~0.02 fps wide, a bin near 60 fps is ~1.2 fps wide. ~240 of those 356
-bins sit in the [0.1, 20] fps "broken anyway" region where you don't
+bins sit in the [0.1, 20] fps region where you don't
 need sub-fps resolution.
 
 Histogram the *frame period* (ms/frame = 1000/fps) instead:
@@ -66,13 +66,12 @@ Telemetry.Metrics.summary("camera.frame_period_ms",
 
 128 bins, 1.4 MB heap — **3× cheaper for the same precision**. Period
 and fps are reciprocal and α is relative, so ±1% on period = ±1% on
-fps. Convert at the dashboard: `fps = 1000 / period_ms`, P99 of fps
-corresponds to P1 of period.
+fps. Convert at the dashboard: `fps = 1000 / period_ms`.
 
 ### When the inverse trick helps
 
-Whenever you care about precision at *high* values and treat *low*
-values as "broken, exact value doesn't matter":
+Whenever you care about precision at *high* values and not too much
+about *low* values:
 
 | Signal | Better domain |
 |---|---|
@@ -83,7 +82,8 @@ values as "broken, exact value doesn't matter":
 
 ## Memory bytes used
 
-Slowly-changing trend signal; ±10% is invisible on a dashboard.
+Slowly-changing trend signal. Default 10% relative error is probably fine
+on a dashboard.
 
 ```elixir
 Telemetry.Metrics.summary("vm.memory.bytes",
@@ -101,8 +101,7 @@ Telemetry.Metrics.summary("vm.memory.bytes",
 
 Most writes are fast (cache, ~ms), some are slow (erase cycles, hundreds
 of ms). The interesting question is "how often does the slow path fire?",
-so capturing tail shape matters. α=0.05 is the sweet spot — α=0.1 blurs
-the gap between modes, α=0.01 captures detail nobody reads.
+so capturing tail shape matters. 0.05 may be the sweet spot.
 
 ```elixir
 Telemetry.Metrics.summary("flash.write.duration",
@@ -130,26 +129,6 @@ Telemetry.Metrics.summary("network.throughput.bytes_per_sec",
     histogram: [
       min_indexable_value: 1_024.0,            # 1 KB/s
       max_indexable_value: 10_485_760.0        # 10 MB/s
-    ]
-  ]
-)
-```
-
-## Boot time (regression watch)
-
-Catching a 5% P50 regression across firmware releases needs tighter
-precision than dashboard-grade. ±2% on a 2 s P50 spots a 40 ms shift
-without false positives.
-
-```elixir
-Telemetry.Metrics.summary("system.boot.duration",
-  measurement: :duration,
-  unit: {:native, :millisecond},
-  reporter_options: [
-    histogram: [
-      min_indexable_value: 100.0,      # < 100 ms isn't real
-      max_indexable_value: 60_000.0,
-      relative_accuracy: 0.02
     ]
   ]
 )
@@ -186,20 +165,12 @@ Histogram cost lives in two places:
 1. **Live ETS.** One counter row per populated bin in the metrics table.
 2. **Snapshot history.** Every per-second/minute/hour/day snapshot
    kept in the Scraper process heap captures every populated bin.
-   This dominates.
+   This dominates memory usage.
 
 Bin counters are **strictly cumulative**: a magnitude observed once
 keeps its row forever. Old snapshots roll off the history but the
 live bins never do. So a deployed metric drifts toward worst-case bin
 count over uptime. Plan with worst case.
-
-When the live counters are lost but the snapshot history survives
-(e.g. a reboot where the metrics-table dump didn't persist), windowed
-queries detect the reset from the backwards-moving counts and degrade
-gracefully: `Mobius.Data.histogram/3` (and the quantile/count
-queries built on it) falls back to everything observed since the
-reset, and `Mobius.Charts.quantiles_over_time/4` skips the one
-interval that straddles the reset.
 
 Bin count is bounded by `ceil(log_γ(max/min)) ≈ (log value range) / α`.
 At default α=0.1 that's ~12 bins per decade:
@@ -226,34 +197,11 @@ baseline for comparison: 2.8 KB ETS, 114 KB heap, 54 KB disk
 
 | Scenario | Live ETS | Heap | Disk | Bins |
 |---|---|---|---|---|
-| HTTP latency (0.1–60_000 ms) | 13 KB | 844 KB | 158 KB | 67 |
-| narrow latency (1–100 ms) | 7 KB | 319 KB | 99 KB | 23 |
-| wide latency (1 ms–10 s) | 11 KB | 642 KB | 130 KB | 46 |
-| very wide (1 µs–1 hr in µs) | 22 KB | 1.2 MB | 216 KB | 110 |
-| defaults (1.0e-9 .. 1.0e18) | 66 KB | 3.2 MB | 544 KB | 311 |
-
-Each snapshot stores bins in a separate histogram map keyed by
-`{name, tags}` with `%{idx => count}` per metric — ~7× smaller heap
-and ~14× smaller disk than the naive one-record-per-bin layout.
-
-A realistic distribution starts much smaller than worst case (a
-log-normal HTTP latency with median 50 ms populates ~23 bins
-initially, ~34% of worst case), but the bin set only grows. The
-worst-case row is the ceiling.
-
-### Tuning grid
-
-Worst-case `heap / disk` per histogram at default retention:
-
-| range \ α | α=0.01 | α=0.02 | α=0.05 | α=0.1 | α=0.2 |
-|---|---|---|---|---|---|
-| sensor (1–1_000 ms) | 347 · 3.6 MB / 629 KB | 174 · 1.9 MB / 303 KB | 71 · 887 KB / 164 KB | 36 · 545 KB / 117 KB | 19 · 297 KB / 94 KB |
-| web latency (0.1–30_000 ms) | 632 · 6.4 MB / 1.3 MB | 316 · 3.3 MB / 556 KB | 128 · 1.4 MB / 241 KB | 64 · 815 KB / 154 KB | 32 · 367 KB / 111 KB |
-| wide (1 µs–1 hr in µs) | 1102 · 10.9 MB / 2.4 MB | 552 · 5.7 MB / 1.1 MB | 221 · 2.3 MB / 366 KB | 111 · 1.2 MB / 218 KB | 56 · 739 KB / 144 KB |
-
-Cell format: `bins · heap / disk`. α and range both scale bin count
-linearly, so tightening either halves cost; tightening both quarters
-it.
+| HTTP latency (0.1–60_000 ms) | 13.7 KB | 838.9 KB | 155.7 KB | 67 |
+| narrow latency (1–100 ms) | 6.5 KB | 318.7 KB | 97.7 KB | 24 |
+| wide latency (1 ms–10 s) | 10.2 KB | 644.8 KB | 128.7 KB | 47 |
+| very wide (1 µs–1 hr in µs) | 20.7 KB | 1.2 MB | 215.0 KB | 111 |
+| defaults (1.0e-9 .. 1.0e18) | 71.8 KB | 3.2 MB | 541.1 KB | 311 |
 
 ### Levers, ranked
 
