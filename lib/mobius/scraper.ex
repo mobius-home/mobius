@@ -3,7 +3,7 @@ defmodule Mobius.Scraper do
 
   use GenServer
 
-  alias Mobius.{Events, MetricsTable, Persistence, RRD}
+  alias Mobius.{Events, MetricsTable, Persistence, RRD, TimeServer}
 
   require Logger
 
@@ -59,9 +59,15 @@ defmodule Mobius.Scraper do
     _ = :timer.send_interval(@interval, self(), :scrape)
     Process.flag(:trap_exit, true)
 
+    # Register before asking for the initial value so a sync that lands
+    # between the two calls arrives as a message instead of being missed
+    # (same order as Mobius.EventsServer).
+    :ok = TimeServer.register(args[:mobius_instance], self())
+
     state =
       args
       |> state_from_args()
+      |> Map.put(:synced?, TimeServer.synchronized?(args[:mobius_instance]))
       |> make_database(args)
 
     {:ok, state}
@@ -220,18 +226,35 @@ defmodule Mobius.Scraper do
   end
 
   @impl GenServer
+  # Scrapes taken before the clock synchronizes would carry garbage
+  # timestamps (e.g. 1970-era on a device waiting for NTP), so skip them
+  # entirely: they would either pollute the RRD or be dropped against the
+  # high-water marks of loaded valid history anyway. The metrics table
+  # keeps aggregating and recording picks up at the first post-sync scrape.
+  def handle_info(:scrape, %{synced?: false} = state) do
+    {:noreply, state}
+  end
+
   def handle_info(:scrape, state) do
     case MetricsTable.get_entries(state.mobius_instance) do
       [] ->
         {:noreply, state}
 
       entries ->
+        # The clock is trusted here, so a timestamp far below the high-water
+        # marks means the wall clock stepped backwards (or persisted history
+        # was recorded under a wrong-ahead clock) and the RRD recovers by
+        # pruning everything above it.
         ts = System.system_time(:second)
         snapshot = build_snapshot(entries)
-        database = RRD.insert(state.database, ts, snapshot)
+        database = RRD.insert_with_regression_recovery(state.database, ts, snapshot)
 
         {:noreply, %{state | database: database}}
     end
+  end
+
+  def handle_info({Mobius.TimeServer, _sync_timestamp, _adjustment}, state) do
+    {:noreply, %{state | synced?: true}}
   end
 
   def handle_info(_message, state) do

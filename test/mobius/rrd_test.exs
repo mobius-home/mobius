@@ -35,6 +35,95 @@ defmodule Mobius.RRDTest do
     assert RRD.query(buffer, 3001) == []
   end
 
+  describe "insert_with_regression_recovery/3" do
+    @tag capture_log: true
+    test "recovers when loaded history is stamped in the future" do
+      # The original bug: a device records history under a wrong-ahead clock
+      # (dead RTC battery), persists it, and after NTP steps the clock back
+      # the loaded entries hold the high-water marks past the present —
+      # insert/3 silently drops every new scrape, surviving reboots because
+      # the RRD is persisted.
+      now = 1_700_000_000
+      ten_years = 10 * 365 * 86_400
+      future_snapshot = {[{"vm.memory.total", :last_value, 999, %{}}], %{}}
+      snapshot = {[{"vm.memory.total", :last_value, 123, %{}}], %{}}
+
+      saved_binary =
+        RRD.new(@args)
+        |> RRD.insert(now + ten_years, future_snapshot)
+        |> RRD.save()
+        |> IO.iodata_to_binary()
+
+      {:ok, loaded} = RRD.load(RRD.new(@args), saved_binary)
+
+      # insert/3 alone cannot get a present-time scrape past the marks
+      assert RRD.all(RRD.insert(loaded, now, snapshot)) == [{now + ten_years, future_snapshot}]
+
+      recovered = RRD.insert_with_regression_recovery(loaded, now, snapshot)
+
+      assert RRD.all(recovered) == [{now, snapshot}]
+    end
+
+    @tag capture_log: true
+    test "prunes only the entries above the new time, keeping older history" do
+      now = 1_700_000_000
+
+      rrd =
+        RRD.new(@args)
+        |> RRD.insert(now - 7200, :valid_old)
+        |> RRD.insert(now - 3600, :valid)
+        |> RRD.insert(now + 500, :ahead)
+        |> RRD.insert(now + 900, :further_ahead)
+
+      recovered = RRD.insert_with_regression_recovery(rrd, now, :present)
+
+      assert RRD.all(recovered) == [
+               {now - 7200, :valid_old},
+               {now - 3600, :valid},
+               {now, :present}
+             ]
+    end
+
+    @tag capture_log: true
+    test "recording continues normally after a recovery" do
+      now = 1_700_000_000
+
+      recovered =
+        RRD.new(@args)
+        |> RRD.insert(now + 500, :ahead)
+        |> RRD.insert_with_regression_recovery(now, :present)
+        |> RRD.insert(now + 1, :next_second)
+        |> RRD.insert(now + 2, :second_after)
+
+      assert RRD.all(recovered) == [
+               {now, :present},
+               {now + 1, :next_second},
+               {now + 2, :second_after}
+             ]
+    end
+
+    @tag capture_log: true
+    test "backwards jitter within the margin is still dropped" do
+      now = 1_700_000_000
+      rrd = RRD.new(@args) |> RRD.insert(now, :current)
+
+      # 60 seconds below the second high-water mark is within the margin:
+      # no recovery, and insert/3 drops the out-of-order item as today.
+      assert RRD.insert_with_regression_recovery(rrd, now - 59, :jitter) == rrd
+    end
+
+    test "in-order inserts behave exactly like insert/3" do
+      now = 1_700_000_000
+
+      rrd =
+        RRD.new(@args)
+        |> RRD.insert_with_regression_recovery(now, :first)
+        |> RRD.insert_with_regression_recovery(now + 1, :second)
+
+      assert RRD.all(rrd) == [{now, :first}, {now + 1, :second}]
+    end
+  end
+
   describe "serialize and decode" do
     test "version 1" do
       in_rrd =

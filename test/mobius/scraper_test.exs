@@ -1,9 +1,27 @@
 defmodule Mobius.ScraperTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
-  alias Mobius.{MetricsTable, RRD, Scraper}
+  alias Mobius.{MetricsTable, RRD, Scraper, TimeServer}
 
   @rrd_args [days: 60, hours: 48, minutes: 120, seconds: 120]
+
+  defmodule FakeClock do
+    @moduledoc false
+
+    # A Mobius.Clock whose answer the test can flip at runtime. The
+    # TimeServer polls from its own process, so the shared state lives in
+    # :persistent_term rather than test process state.
+    @behaviour Mobius.Clock
+
+    @key {__MODULE__, :synchronized?}
+
+    def set(synchronized?), do: :persistent_term.put(@key, synchronized?)
+
+    def clear(), do: :persistent_term.erase(@key)
+
+    @impl Mobius.Clock
+    def synchronized?(), do: :persistent_term.get(@key, false)
+  end
 
   setup do
     persistence_dir =
@@ -15,21 +33,52 @@ defmodule Mobius.ScraperTest do
     {:ok, persistence_dir: persistence_dir}
   end
 
-  defp start_scraper(instance, persistence_dir, database) do
+  defp start_scraper(instance, persistence_dir, database, opts \\ []) do
     # The scrape timer reads from a metrics table named after the instance, so
     # make sure it exists before the scraper starts.
     if :ets.whereis(instance) == :undefined do
       MetricsTable.init(mobius_instance: instance, persistence_dir: persistence_dir)
     end
 
-    args = [
-      mobius_instance: instance,
-      persistence_dir: persistence_dir,
-      database: database
-    ]
+    args =
+      [
+        mobius_instance: instance,
+        persistence_dir: persistence_dir,
+        database: database
+      ] ++ opts
+
+    # The scraper registers with its instance's TimeServer at boot, so one
+    # must be running (the Mobius supervisor starts it first in production).
+    if Registry.lookup(Mobius.ProcessRegistry, {TimeServer, instance}) == [] do
+      start_supervised!({TimeServer, args})
+    end
 
     pid = start_supervised!({Scraper, args})
     {pid, instance}
+  end
+
+  defp write_history(persistence_dir, rrd) do
+    binary = rrd |> RRD.save() |> IO.iodata_to_binary()
+    File.write!(Path.join(persistence_dir, "history"), binary)
+  end
+
+  defp eventually(fun, timeout \\ 15_000) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    eventually_loop(fun, deadline)
+  end
+
+  defp eventually_loop(fun, deadline) do
+    cond do
+      fun.() ->
+        :ok
+
+      System.monotonic_time(:millisecond) > deadline ->
+        flunk("condition not met in time")
+
+      true ->
+        Process.sleep(100)
+        eventually_loop(fun, deadline)
+    end
   end
 
   test "save/1 persists the database so a fresh scraper restores it", %{
@@ -60,5 +109,84 @@ defmodule Mobius.ScraperTest do
              {1234, {"vm.memory.total", :last_value, 123, %{}}},
              {3000, {"vm.memory.total", :last_value, 124, %{}}}
            ] == Scraper.all(instance)
+  end
+
+  test "neither records nor loses history until the clock synchronizes", %{
+    persistence_dir: persistence_dir
+  } do
+    # A device with a clock module boots with valid persisted history but an
+    # unset clock (e.g. waiting for NTP). Scrapes taken now would carry
+    # garbage timestamps, so nothing may be recorded — and the loaded
+    # history must survive untouched until the clock syncs.
+    instance = :scraper_unsynced_boot
+    FakeClock.set(false)
+    on_exit(&FakeClock.clear/0)
+
+    now = System.system_time(:second)
+
+    history = [
+      {now - 30, {"vm.memory.total", :last_value, 123, %{}}},
+      {now - 20, {"vm.memory.total", :last_value, 124, %{}}}
+    ]
+
+    database =
+      Enum.reduce(history, RRD.new(@rrd_args), fn {ts, record}, rrd ->
+        RRD.insert(rrd, ts, [record])
+      end)
+
+    write_history(persistence_dir, database)
+
+    {_pid, ^instance} =
+      start_scraper(instance, persistence_dir, RRD.new(@rrd_args), clock: FakeClock)
+
+    MetricsTable.put(instance, [:vm, :memory, :total], :last_value, 125)
+
+    # Let several scrape ticks pass while the clock is unsynchronized.
+    Process.sleep(2_500)
+
+    assert Scraper.all(instance) == history
+
+    FakeClock.set(true)
+
+    # Once the TimeServer notices the sync, recording resumes on top of the
+    # loaded history.
+    eventually(fn -> length(Scraper.all(instance)) > length(history) end)
+
+    records = Scraper.all(instance)
+    assert Enum.take(records, 2) == history
+    assert Enum.all?(records, fn {ts, _record} -> ts >= now - 30 end)
+  end
+
+  @tag capture_log: true
+  test "recovers from future-stamped persisted history with no clock module", %{
+    persistence_dir: persistence_dir
+  } do
+    # Without a :clock module the TimeServer reports synchronized from boot,
+    # so a scrape stamped far below the loaded high-water marks means the
+    # wall clock stepped backwards since the history was recorded: the
+    # future entries are pruned and recording continues at the present.
+    instance = :scraper_future_history
+    now = System.system_time(:second)
+    ten_years = 10 * 365 * 86_400
+
+    database =
+      RRD.new(@rrd_args)
+      |> RRD.insert(now + ten_years, [{"vm.memory.total", :last_value, 999, %{}}])
+
+    write_history(persistence_dir, database)
+
+    {_pid, ^instance} = start_scraper(instance, persistence_dir, RRD.new(@rrd_args))
+
+    MetricsTable.put(instance, [:vm, :memory, :total], :last_value, 125)
+
+    # The future entry is gone and a present-time scrape took its place.
+    eventually(fn ->
+      case Scraper.all(instance) do
+        [] -> false
+        records -> Enum.all?(records, fn {ts, _record} -> ts < now + ten_years end)
+      end
+    end)
+
+    assert Enum.all?(Scraper.all(instance), fn {ts, _record} -> ts >= now end)
   end
 end

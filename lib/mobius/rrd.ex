@@ -183,6 +183,80 @@ defmodule Mobius.RRD do
     (div(ts, res) + 1) * res
   end
 
+  # How far below the second high-water mark an insert may land before it
+  # is treated as a backwards wall-clock step instead of ordinary jitter.
+  @regression_margin 60
+
+  @doc """
+  Insert an item for the specified time, recovering from backwards clock steps
+
+  Behaves like `insert/3` unless `ts` is more than #{@regression_margin} seconds
+  below the second high-water mark. The marks only move forward, so after the
+  wall clock steps backwards that far `insert/3` would silently drop every
+  scrape until the clock catches back up — and since the RRD is persisted, the
+  condition survives reboots. A trusted clock that steps backwards also means
+  everything recorded above `ts` was stamped by a clock now known to have been
+  ahead, so those entries are pruned (and the high-water marks reset) before
+  the item is inserted. Backwards jitter within the margin keeps the `insert/3`
+  drop behavior.
+
+  Callers are expected to only use this with timestamps from a synchronized
+  clock: a pre-sync timestamp (e.g. 1970-era before NTP) would prune valid
+  history.
+  """
+  @spec insert_with_regression_recovery(t(), integer(), snapshot()) :: t()
+  def insert_with_regression_recovery(rrd, ts, item) do
+    if ts < rrd.second_next - @regression_margin do
+      rrd
+      |> prune_future(ts)
+      |> insert(ts, item)
+    else
+      insert(rrd, ts, item)
+    end
+  end
+
+  # Drop every entry stamped after ts. CircularBuffer has no removal, so each
+  # archive is rebuilt from its surviving entries. The high-water marks reset
+  # to zero — fresh-start semantics; the insert that follows re-establishes
+  # them from ts.
+  defp prune_future(rrd, ts) do
+    {day, dropped_day} = prune_buffer(rrd.day, ts)
+    {hour, dropped_hour} = prune_buffer(rrd.hour, ts)
+    {minute, dropped_minute} = prune_buffer(rrd.minute, ts)
+    {second, dropped_second} = prune_buffer(rrd.second, ts)
+
+    dropped = dropped_day + dropped_hour + dropped_minute + dropped_second
+
+    Logger.warning(
+      "Pruning #{dropped} metric snapshot(s) stamped after #{ts}" <>
+        " - the clock stepped backwards, so they were recorded under a clock that was ahead"
+    )
+
+    %{
+      rrd
+      | day: day,
+        hour: hour,
+        minute: minute,
+        second: second,
+        day_next: 0,
+        hour_next: 0,
+        minute_next: 0,
+        second_next: 0
+    }
+  end
+
+  defp prune_buffer(buffer, ts) do
+    entries = CircularBuffer.to_list(buffer)
+    kept = Enum.filter(entries, fn {entry_ts, _item} -> entry_ts <= ts end)
+
+    rebuilt =
+      Enum.reduce(kept, CircularBuffer.new(buffer.max_size), fn entry, acc ->
+        CircularBuffer.insert(acc, entry)
+      end)
+
+    {rebuilt, length(entries) - length(kept)}
+  end
+
   @typedoc """
   Identity of a histogram-enabled metric definition: name plus sorted tag keys.
   """
