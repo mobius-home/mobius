@@ -402,23 +402,11 @@ defmodule Mobius.RRD do
   @doc """
   Serialize to an iolist
 
-  Always writes the current serialization format. There is no
-  down-conversion to older formats: passing a `:serialization_version`
-  other than the current one raises `ArgumentError` rather than emitting
-  a file that `load/3` cannot read.
+  Always writes the current serialization format; `load/3` handles older
+  formats on the way back in.
   """
   @spec save(t(), [save_opt()]) :: iolist()
   def save(rrd, opts \\ []) do
-    case Keyword.get(opts, :serialization_version, @serialization_version) do
-      @serialization_version ->
-        :ok
-
-      other ->
-        raise ArgumentError,
-              "save/2 only writes serialization version #{@serialization_version}, " <>
-                "got: #{inspect(other)}"
-    end
-
     compression_level = opts[:compression_level] || @default_compression_level
     payload = %{configs: opts[:histogram_configs] || %{}, data: all(rrd)}
 
