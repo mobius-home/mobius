@@ -35,7 +35,6 @@ defmodule Mobius.Charts do
   alias Telemetry.Metrics
 
   @default_window_seconds 180
-  @max_history_seconds 60 * 86_400
 
   @typedoc """
   Options shared by every query.
@@ -43,7 +42,9 @@ defmodule Mobius.Charts do
     * `:mobius_instance` - the instance to query (default `:mobius`)
     * `:last` - window covering the last `x`, where `x` is an integer number of
       seconds or `{integer(), Mobius.time_unit()}`
-    * `:from` / `:to` - explicit unix-second window bounds
+    * `:from` / `:to` - explicit unix-second window bounds; each may be given
+      alone — `:from` defaults to 0 (the beginning of stored history) and
+      `:to` defaults to now
 
   With no window option the last #{@default_window_seconds} seconds are used.
   """
@@ -450,7 +451,7 @@ defmodule Mobius.Charts do
         :error -> []
       end
     end)
-    |> Enum.filter(fn {ts, _} -> to - ts <= @max_history_seconds and ts <= to end)
+    |> Enum.filter(fn {ts, _} -> ts <= to end)
     |> Enum.chunk_every(2, 1, :discard)
     |> Enum.flat_map(fn
       [{_t0, earlier}, {t1, later}] when t1 >= from ->

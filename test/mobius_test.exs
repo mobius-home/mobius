@@ -76,6 +76,37 @@ defmodule MobiusTest do
     assert File.exists?(Path.join(persistence_path, "history"))
   end
 
+  @tag capture_log: true
+  test "save reports an error when only the event log write fails" do
+    persistence_path = Path.join(@persistence_dir, @default_instance_str)
+    {:ok, _pid} = start_supervised({Mobius, @default_args})
+
+    handler_id = "save-event-log-error-test"
+
+    :ok =
+      :telemetry.attach_many(
+        handler_id,
+        [[:mobius, :save, :stop], [:mobius, :save, :exception]],
+        fn event, _measurements, _metadata, pid -> send(pid, {:telemetry_event, event}) end,
+        self()
+      )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+
+    # A directory sits where the event log file should go, so the metrics
+    # writes succeed but the event log write cannot.
+    File.mkdir_p!(Path.join(persistence_path, "event_log"))
+
+    assert {:error, _reason} = Mobius.save(@default_instance)
+
+    assert_received {:telemetry_event, [:mobius, :save, :exception]}
+    refute_received {:telemetry_event, [:mobius, :save, :stop]}
+
+    # The sibling save paths still persisted their files.
+    assert File.exists?(Path.join(persistence_path, "history"))
+    assert File.exists?(Path.join(persistence_path, "metrics_table"))
+  end
+
   test "boots when a metric's histogram options are invalid, keeping the summary" do
     metrics = [
       Telemetry.Metrics.summary("boot.bad.hist",
@@ -178,7 +209,7 @@ defmodule MobiusTest do
         )
       ]
 
-      {:ok, _pid} = start_supervised({Mobius, Keyword.put(@default_args, :metrics, metrics)})
+      {:ok, _pid} = start_supervised({Mobius, Keyword.merge(@default_args, metrics: metrics)})
 
       # Record a metric and an event.
       :telemetry.execute([:remove_all_data, :test], %{count: 1}, %{})
@@ -192,8 +223,7 @@ defmodule MobiusTest do
       assert Mobius.MetricsTable.get_entries(instance) != []
 
       # Give the scraper a tick to capture a snapshot into the RRD.
-      Process.sleep(1_100)
-      refute Enum.empty?(Mobius.Scraper.all(instance))
+      refute Enum.empty?(wait_for_scrape(instance))
 
       # The event landed in the event log.
       assert Mobius.EventLog.list(instance: instance) != []
@@ -247,10 +277,11 @@ defmodule MobiusTest do
         )
       ]
 
-      {:ok, _pid} = start_supervised({Mobius, Keyword.put(@default_args, :metrics, metrics)})
+      args = Keyword.merge(@default_args, metrics: metrics)
+      {:ok, _pid} = start_supervised({Mobius, args})
 
       :telemetry.execute([:remove_all_data, :save], %{count: 1}, %{})
-      Process.sleep(1_100)
+      refute Enum.empty?(wait_for_scrape(instance))
 
       assert :ok = Mobius.remove_all_data(instance)
       assert :ok = Mobius.save(instance)
@@ -262,10 +293,23 @@ defmodule MobiusTest do
 
       stop_supervised!(Mobius)
 
-      {:ok, _pid} = start_supervised({Mobius, Keyword.put(@default_args, :metrics, metrics)})
+      {:ok, _pid} = start_supervised({Mobius, args})
 
       assert Mobius.MetricsTable.get_entries(instance) == []
       assert Mobius.Scraper.all(instance) == []
+    end
+  end
+
+  # The metric lands at the first scrape tick after its telemetry event, up
+  # to one scrape interval (1 s) later — poll with margin for slow CI.
+  defp wait_for_scrape(instance, timeout_ms \\ 2_500) do
+    case Mobius.Scraper.all(instance) do
+      [] when timeout_ms > 0 ->
+        Process.sleep(10)
+        wait_for_scrape(instance, timeout_ms - 10)
+
+      records ->
+        records
     end
   end
 
