@@ -7,7 +7,7 @@ defmodule Mobius.Scraper do
 
   require Logger
 
-  @interval 1_000
+  @default_interval 1_000
   @file_name "history"
 
   @doc """
@@ -56,7 +56,7 @@ defmodule Mobius.Scraper do
 
   @impl GenServer
   def init(args) do
-    _ = :timer.send_interval(@interval, self(), :scrape)
+    _ = :timer.send_interval(scrape_interval(args[:scrape_interval]), self(), :scrape)
     Process.flag(:trap_exit, true)
 
     state =
@@ -65,6 +65,19 @@ defmodule Mobius.Scraper do
       |> make_database(args)
 
     {:ok, state}
+  end
+
+  defp scrape_interval(nil), do: @default_interval
+
+  defp scrape_interval(interval) when is_integer(interval) and interval > 0, do: interval
+
+  defp scrape_interval(bad_interval) do
+    Logger.warning(
+      "[Mobius] Ignoring invalid :scrape_interval #{inspect(bad_interval)}, " <>
+        "using #{@default_interval} ms"
+    )
+
+    @default_interval
   end
 
   defp state_from_args(args) do

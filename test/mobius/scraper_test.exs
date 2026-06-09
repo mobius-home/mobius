@@ -39,7 +39,7 @@ defmodule Mobius.ScraperTest do
     {_pid, ^instance} =
       start_scraper(instance, persistence_dir, RRD.new(@rrd_args), scrape_interval: 50)
 
-    MetricsTable.put(instance, "scrape.interval.test", :last_value, 42)
+    MetricsTable.put(instance, [:scrape, :interval, :test], :last_value, 42)
 
     # With a 50 ms interval the first scrape lands well within 500 ms; the
     # default 1 s interval would still be waiting for its first tick.

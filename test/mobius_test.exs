@@ -178,7 +178,10 @@ defmodule MobiusTest do
         )
       ]
 
-      {:ok, _pid} = start_supervised({Mobius, Keyword.put(@default_args, :metrics, metrics)})
+      {:ok, _pid} =
+        start_supervised(
+          {Mobius, Keyword.merge(@default_args, metrics: metrics, scrape_interval: 50)}
+        )
 
       # Record a metric and an event.
       :telemetry.execute([:remove_all_data, :test], %{count: 1}, %{})
@@ -192,8 +195,7 @@ defmodule MobiusTest do
       assert Mobius.MetricsTable.get_entries(instance) != []
 
       # Give the scraper a tick to capture a snapshot into the RRD.
-      Process.sleep(1_100)
-      refute Enum.empty?(Mobius.Scraper.all(instance))
+      refute Enum.empty?(wait_for_scrape(instance))
 
       # The event landed in the event log.
       assert Mobius.EventLog.list(instance: instance) != []
@@ -247,10 +249,11 @@ defmodule MobiusTest do
         )
       ]
 
-      {:ok, _pid} = start_supervised({Mobius, Keyword.put(@default_args, :metrics, metrics)})
+      args = Keyword.merge(@default_args, metrics: metrics, scrape_interval: 50)
+      {:ok, _pid} = start_supervised({Mobius, args})
 
       :telemetry.execute([:remove_all_data, :save], %{count: 1}, %{})
-      Process.sleep(1_100)
+      refute Enum.empty?(wait_for_scrape(instance))
 
       assert :ok = Mobius.remove_all_data(instance)
       assert :ok = Mobius.save(instance)
@@ -262,10 +265,21 @@ defmodule MobiusTest do
 
       stop_supervised!(Mobius)
 
-      {:ok, _pid} = start_supervised({Mobius, Keyword.put(@default_args, :metrics, metrics)})
+      {:ok, _pid} = start_supervised({Mobius, args})
 
       assert Mobius.MetricsTable.get_entries(instance) == []
       assert Mobius.Scraper.all(instance) == []
+    end
+  end
+
+  defp wait_for_scrape(instance, timeout_ms \\ 1_000) do
+    case Mobius.Scraper.all(instance) do
+      [] when timeout_ms > 0 ->
+        Process.sleep(10)
+        wait_for_scrape(instance, timeout_ms - 10)
+
+      records ->
+        records
     end
   end
 

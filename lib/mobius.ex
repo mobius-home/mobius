@@ -55,6 +55,9 @@ defmodule Mobius do
   * `:autosave_interval` - time in seconds (a positive integer) between
      automatic writes of the persistence data (default disabled) metric
      information
+  * `:scrape_interval` - time in milliseconds between scrapes of the tracked
+     metrics into the history (defaults to `1_000`). Must be a positive
+     integer; invalid values fall back to the default with a logged warning
   * `:compression_level` - the zlib level (`0..9`) used when compressing
      persisted metric history and event log data. Higher levels trade more CPU
      at save time for smaller files. Defaults to `9` (maximum compression). `0`
@@ -80,6 +83,7 @@ defmodule Mobius do
           | {:metrics, [Metrics.t()]}
           | {:persistence_dir, binary()}
           | {:autosave_interval, non_neg_integer() | nil}
+          | {:scrape_interval, pos_integer()}
           | {:compression_level, 0..9}
           | {:database, Mobius.RRD.t()}
           | {:events, [event_def()]}
