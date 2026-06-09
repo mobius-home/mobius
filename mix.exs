@@ -43,6 +43,7 @@ defmodule Mobius.MixProject do
     [
       extras: [
         "README.md",
+        "guides/what-to-measure.md": [title: "What to measure"],
         "guides/histograms.md": [title: "Histogram configurations"],
         "CHANGELOG.md": []
       ],
@@ -50,7 +51,7 @@ defmodule Mobius.MixProject do
       source_ref: "v#{@version}",
       source_url: "https://github.com/mobius-home/mobius",
       skip_undefined_reference_warnings_on: ["CHANGELOG.md"],
-      assets: "assets",
+      assets: %{"assets" => "assets"},
       logo: "assets/m.png"
     ]
   end

@@ -41,6 +41,10 @@ def start(_type, _args) do
 end
 ```
 
+For guidance on which metrics are worth tracking — BEAM/OTP gauges,
+hardware signals, and which of them deserve a histogram — see
+[What to measure](guides/what-to-measure.md).
+
 ### Quick tips
 
 To see a view of the current metrics you can use `Mobius.info/0`:
