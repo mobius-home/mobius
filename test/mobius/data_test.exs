@@ -61,6 +61,30 @@ defmodule Mobius.DataTest do
     end
 
     @tag :tmp_dir
+    test "windows are not truncated to the default 60-day retention", %{tmp_dir: tmp_dir} do
+      instance = :data_summary_windows_no_cap
+
+      start_instance(instance, tmp_dir, [
+        Telemetry.Metrics.summary("db.query.ms", measurement: :ms)
+      ])
+
+      for n <- 1..10, do: :telemetry.execute([:db, :query], %{ms: n * 1.0}, %{})
+      Process.sleep(@scrape_interval_ms * 2)
+
+      for n <- 100..119, do: :telemetry.execute([:db, :query], %{ms: n * 1.0}, %{})
+      Process.sleep(@scrape_interval_ms * 2)
+
+      # The stored data lies more than 60 days before :to but inside the
+      # requested window. A hardcoded 60-day cap would silently drop it.
+      to = System.system_time(:second) + 61 * 86_400
+
+      {:ok, windows} =
+        Data.summary_windows("db.query.ms", %{}, mobius_instance: instance, from: 0, to: to)
+
+      assert windows != []
+    end
+
+    @tag :tmp_dir
     test "an unobserved summary metric yields no windows", %{tmp_dir: tmp_dir} do
       instance = :data_summary_windows_empty
 

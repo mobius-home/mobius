@@ -34,15 +34,15 @@ defmodule Mobius.Data do
   alias Mobius.Data.{Histogram, Metrics}
   alias Mobius.{Scraper, Summary}
 
-  @max_history_seconds 60 * 86_400
-
   @typedoc """
   Options shared by every query.
 
     * `:mobius_instance` - the instance to query (default `:mobius`)
     * `:last` - window covering the last `x`, where `x` is an integer number of
       seconds or `{integer(), Mobius.time_unit()}`
-    * `:from` / `:to` - explicit unix-second window bounds
+    * `:from` / `:to` - explicit unix-second window bounds; each may be given
+      alone — `:from` defaults to 0 (the beginning of stored history) and
+      `:to` defaults to now
 
   With no window option the last 3 minutes are used.
   """
@@ -226,7 +226,7 @@ defmodule Mobius.Data do
       {ts, {^metric_name, :summary, data, rec_tags}} when rec_tags == tags -> [{ts, data}]
       _ -> []
     end)
-    |> Enum.filter(fn {ts, _data} -> to - ts <= @max_history_seconds and ts <= to end)
+    |> Enum.filter(fn {ts, _data} -> ts <= to end)
     |> Enum.uniq_by(fn {ts, _data} -> ts end)
     |> Enum.sort_by(fn {ts, _data} -> ts end)
     |> Enum.chunk_every(2, 1, :discard)
@@ -253,14 +253,16 @@ defmodule Mobius.Data do
 
   # Shared window resolution for the Data and Charts query APIs: turn
   # `:from`/`:to` or `:last` (or nothing → the default 3-minute window) into
-  # absolute `{from, to}` unix-second bounds.
+  # absolute `{from, to}` unix-second bounds. `:from` and `:to` are independent
+  # bounds: `:from` alone runs to now, `:to` alone starts at 0 (the beginning
+  # of stored history).
   @doc false
   @spec resolve_window([opt()]) :: {integer(), integer()}
   def resolve_window(opts) do
     now = System.system_time(:second)
 
     cond do
-      opts[:from] != nil -> {opts[:from], opts[:to] || now}
+      opts[:from] != nil or opts[:to] != nil -> {opts[:from] || 0, opts[:to] || now}
       opts[:last] != nil -> {now - last_seconds(opts[:last]), now}
       true -> {now - 180, now}
     end
