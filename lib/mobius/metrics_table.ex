@@ -8,9 +8,14 @@ defmodule Mobius.MetricsTable do
 
   @typedoc """
   A single entry of a metric in the metric table
+
+  The name is the dotted string form of the metric name. The type is either
+  one of the regular metric types or a histogram bin key, and the value
+  depends on the type — for example an integer for counters and a
+  `Mobius.Summary.data()` map for summaries.
   """
   @type metric_entry() ::
-          {Mobius.metric_name(), Mobius.metric_type(), integer(), map()}
+          {Mobius.metric_name(), Mobius.metric_type() | Mobius.DDSketch.bin_key(), term(), map()}
 
   require Logger
 

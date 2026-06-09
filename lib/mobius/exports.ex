@@ -22,7 +22,7 @@ defmodule Mobius.Exports do
 
   * `:mobius_instance` - the name of the Mobius instance you are using. Unless
     you specified this in your configuration you should be safe to allow this
-    option to default, which is `:mobius_metrics`.
+    option to default, which is `:mobius`.
   * `:last` - display data point that have been captured over the last `x`
     amount of time. Where `x` is either an integer or a tuple of
     `{integer(), time_unit()}`. If you only pass an integer the time unit of
@@ -66,7 +66,7 @@ defmodule Mobius.Exports do
   Mobius.Exports.csv("vm.memory.total", :last_value, %{}, iodevice: :stdio)
 
   # Write to a file
-  file = File.open("mycsv.csv", [:write])
+  {:ok, file} = File.open("mycsv.csv", [:write])
   :ok = Mobius.Exports.csv("vm.memory.total", :last_value, %{}, iodevice: file)
   ```
   """
@@ -87,7 +87,7 @@ defmodule Mobius.Exports do
   @doc """
   Generates a series that contains the value of the metric
   """
-  @spec series(String.t(), export_metric_type(), map(), [export_opt()]) :: [integer()]
+  @spec series(String.t(), export_metric_type(), map(), [export_opt()]) :: [term()]
   def series(metric_name, type, tags, opts \\ []) do
     metric_name
     |> get_metrics(type, tags, opts)
@@ -149,7 +149,7 @@ defmodule Mobius.Exports do
     filter_metrics_opts =
       opts
       |> Keyword.put_new(:mobius_instance, :mobius)
-      |> Keyword.take([:metic_name, :type, :tags, :mobius_instance, :from, :to, :last])
+      |> Keyword.take([:type, :tags, :mobius_instance, :from, :to, :last])
 
     metrics(metric_name, type, tags, filter_metrics_opts)
   end
@@ -188,13 +188,13 @@ defmodule Mobius.Exports do
   Plotting data over the last 30 seconds:
 
   ```elixir
-  Mobius.Export.plot("vm.memory.total", :last_value, %{}, last: 30)
+  Mobius.Exports.plot("vm.memory.total", :last_value, %{}, last: 30)
   ```
 
   Plotting data over the last 2 hours:
 
   ```elixir
-  Mobius.Export.plot("vm.memory.total", :last_value, %{}, last: {2, :hour})
+  Mobius.Exports.plot("vm.memory.total", :last_value, %{}, last: {2, :hour})
   ```
 
   Retrieving summary data can be performed by specifying type of the form:
@@ -218,7 +218,7 @@ defmodule Mobius.Exports do
     Mobius.plot(metric_name, Keyword.merge(opts, type: type, tags: tags))
   end
 
-  @type mfb_export_opt() :: {:out_dir, Path.t()} | export_opt()
+  @type mbf_export_opt() :: {:out_dir, Path.t()} | export_opt()
 
   @doc """
   Export all metrics in the Mobius Binary Format (MBF)
@@ -246,7 +246,7 @@ defmodule Mobius.Exports do
 
   See `Mobius.Exports.parse_mbf/1` to parse a binary in MBF.
   """
-  @spec mbf([mfb_export_opt()]) :: binary() | {:ok, Path.t()} | {:error, Mobius.FileError.t()}
+  @spec mbf([mbf_export_opt()]) :: binary() | {:ok, Path.t()} | {:error, Mobius.FileError.t()}
   def mbf(opts \\ []) do
     mobius_instance = opts[:mobius_instance] || :mobius
 

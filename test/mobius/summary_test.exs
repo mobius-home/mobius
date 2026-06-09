@@ -34,6 +34,15 @@ defmodule Mobius.SummaryTest do
     assert expected_summary == Summary.calculate(summary_data)
   end
 
+  # `Summary.t()` types `:std_dev` as `float()`, so a single-report summary
+  # must produce `0.0` rather than the integer `0`.
+  test "calculate returns a float std_dev for a single report" do
+    summary = 100 |> Summary.new() |> Summary.calculate()
+
+    assert is_float(summary.std_dev)
+    assert summary.std_dev == 0.0
+  end
+
   test "calculate exposes the report count as the subgroup size" do
     summary_data =
       100
