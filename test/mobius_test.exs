@@ -132,7 +132,7 @@ defmodule MobiusTest do
   describe "remove_all_data/1" do
     test "clears in-memory metrics, history, the event log, and persisted files" do
       persistence_path = Path.join(@persistence_dir, @default_instance_str)
-      instance = String.to_atom(@default_instance_str)
+      instance = @default_instance
 
       metrics = [
         Telemetry.Metrics.counter("remove_all_data.test.count",
@@ -179,7 +179,7 @@ defmodule MobiusTest do
     end
 
     test "keeps tracking configured metrics after removing all data" do
-      instance = String.to_atom(@default_instance_str)
+      instance = @default_instance
 
       metrics = [
         Telemetry.Metrics.counter("remove_all_data.again.count",
@@ -201,7 +201,7 @@ defmodule MobiusTest do
     end
 
     test "a later save does not resurrect cleared data" do
-      instance = String.to_atom(@default_instance_str)
+      instance = @default_instance
 
       metrics = [
         Telemetry.Metrics.counter("remove_all_data.save.count",
