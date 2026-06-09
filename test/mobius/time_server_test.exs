@@ -7,7 +7,7 @@ defmodule Mobius.TimeServerTest do
     @behaviour Mobius.Clock
 
     @impl Mobius.Clock
-    def synchronized? do
+    def synchronized?() do
       :persistent_term.get({__MODULE__, :synchronized?}, false)
     end
 

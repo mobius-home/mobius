@@ -81,7 +81,8 @@ defmodule Mobius.TimeServer do
   def handle_info(:check_clock, %{synced?: false} = state) do
     if state.clock.synchronized?() do
       sync_timestamp = System.system_time()
-      adjustment = sync_timestamp - state.started_sys_time
+      elapsed = System.monotonic_time() - state.started_at
+      adjustment = sync_timestamp - (state.started_sys_time + elapsed)
 
       :ok = notify(sync_timestamp, adjustment, state.registered)
 
