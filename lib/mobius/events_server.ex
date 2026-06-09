@@ -43,7 +43,7 @@ defmodule Mobius.EventsServer do
   """
   @spec save(Mobius.instance(), binary()) :: :ok
   def save(instance \\ :mobius, binary) do
-    GenServer.cast(name(instance), {:save, binary})
+    GenServer.call(name(instance), {:save, binary})
   end
 
   @doc """
@@ -103,6 +103,15 @@ defmodule Mobius.EventsServer do
     {:reply, make_list(state.buffer, opts), state}
   end
 
+  # Synchronous so callers (and Mobius.save/1) only see :ok once the event
+  # log is actually on disk — otherwise the write races a caller that reads
+  # or removes the persistence dir right after save returns.
+  def handle_call({:save, binary}, _from, state) do
+    :ok = do_save(binary, state)
+
+    {:reply, :ok, state}
+  end
+
   @impl GenServer
   def handle_cast({:insert_event, event}, state) do
     if TimeServer.synchronized?(state.instance) do
@@ -113,12 +122,6 @@ defmodule Mobius.EventsServer do
       out_of_time_buffer = CircularBuffer.insert(state.out_of_time_buffer, event)
       {:noreply, %{state | out_of_time_buffer: out_of_time_buffer}}
     end
-  end
-
-  def handle_cast({:save, binary}, state) do
-    :ok = do_save(binary, state)
-
-    {:noreply, state}
   end
 
   def handle_cast(:reset, state) do
