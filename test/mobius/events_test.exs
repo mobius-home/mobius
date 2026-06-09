@@ -103,6 +103,9 @@ defmodule Mobius.EventsTest do
 
   describe "histogram-enabled summary metric" do
     setup do
+      # A fresh, intentionally unique instance atom per test run; it cannot
+      # already exist, so the "existing atom" variant is not applicable here.
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       table = :"mobius_test_histogram_#{System.unique_integer([:positive])}"
       MetricsTable.init(mobius_instance: table, persistence_dir: "/does/not/matter/here")
       {:ok, %{table: table}}
