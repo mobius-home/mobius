@@ -41,7 +41,7 @@ defmodule Mobius.EventsServer do
   @doc """
   Save the event log to disk
   """
-  @spec save(Mobius.instance()) :: :ok
+  @spec save(Mobius.instance()) :: :ok | {:error, reason :: term()}
   def save(instance \\ :mobius) do
     GenServer.call(name(instance), :save)
   end
@@ -221,9 +221,9 @@ defmodule Mobius.EventsServer do
       :ok ->
         :ok
 
-      {:error, reason} ->
+      {:error, reason} = error ->
         Logger.warning("[Mobius]: unable to save event log: #{inspect(reason)}")
-        :ok
+        error
     end
   end
 end
