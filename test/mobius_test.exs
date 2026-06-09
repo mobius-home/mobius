@@ -7,6 +7,7 @@ defmodule MobiusTest do
     persistence_dir: @persistence_dir,
     metrics: []
   ]
+  @default_instance :mobius
   @default_instance_str "mobius"
 
   setup do
@@ -51,12 +52,12 @@ defmodule MobiusTest do
     persistence_path = Path.join(@persistence_dir, @default_instance_str)
     {:ok, _pid} = start_supervised({Mobius, @default_args})
 
-    assert :ok = Mobius.save(@default_instance_str)
+    assert :ok = Mobius.save(@default_instance)
     File.rm_rf!(persistence_path)
 
     # Writability can come and go — every save attempt re-creates the
     # directory, so persistence recovers on its own.
-    assert :ok = Mobius.save(@default_instance_str)
+    assert :ok = Mobius.save(@default_instance)
     assert File.exists?(Path.join(persistence_path, "history"))
   end
 
@@ -112,7 +113,7 @@ defmodule MobiusTest do
     persistence_path = Path.join(@persistence_dir, @default_instance_str)
     {:ok, _pid} = start_supervised({Mobius, @default_args})
 
-    assert :ok = Mobius.save(@default_instance_str)
+    assert :ok = Mobius.save(@default_instance)
     assert File.exists?(Path.join(persistence_path, "history"))
     assert File.exists?(Path.join(persistence_path, "metrics_table"))
   end

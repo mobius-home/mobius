@@ -19,14 +19,7 @@ defmodule Mobius.EventsServer do
   end
 
   defp name(instance) do
-    # Builds this server's registered process name from the Mobius instance.
-    # `Module.safe_concat/2` cannot be used: the resulting atom (e.g.
-    # `Mobius.EventsServer.mobius`) is a synthetic registration name, not a real
-    # module, so it will not already exist and `safe_concat` would raise. The
-    # instance is developer-supplied config (not untrusted runtime input) and
-    # the set of names is bounded, so creating the atom here is safe.
-    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    Module.concat(__MODULE__, instance)
+    {:via, Registry, {Mobius.ProcessRegistry, {__MODULE__, instance}}}
   end
 
   @doc """
