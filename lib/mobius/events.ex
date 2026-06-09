@@ -72,7 +72,7 @@ defmodule Mobius.Events do
   @doc """
   Disable invalid histogram configurations in a metrics list.
 
-  Mobius is observability, not business value — a typo in histogram
+  Mobius is observability, not the app's purpose — a typo in histogram
   options must not take the host application's supervision tree down.
   Each histogram-enabled summary metric is validated here, once, at
   boot: valid options are normalized (integers cast to floats) so every
