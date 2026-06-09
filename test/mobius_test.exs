@@ -128,6 +128,20 @@ defmodule MobiusTest do
     assert File.exists?(Path.join(persistence_path, "metrics_table"))
   end
 
+  test "a non-integer autosave_interval disables autosave with a warning" do
+    log =
+      capture_log(fn ->
+        assert {:ok, _pid} = start_supervised({Mobius, @default_args ++ [autosave_interval: 1.5]})
+      end)
+
+    assert log =~ "autosave_interval"
+
+    # The AutoSave server must not be started at all — a float interval makes
+    # :timer.send_interval/3 return {:error, :badarg}, silently disabling
+    # autosave while looking enabled.
+    refute Process.whereis(Module.concat(Mobius.AutoSave, :mobius))
+  end
+
   describe "remove_all_data/1" do
     test "clears in-memory metrics, history, the event log, and persisted files" do
       persistence_path = Path.join(@persistence_dir, @default_instance_str)

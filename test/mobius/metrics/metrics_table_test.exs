@@ -126,6 +126,25 @@ defmodule Mobius.Metrics.MetricsTableTest do
              MetricsTable.get_entries_by_metric_name(table, "saved.value")
   end
 
+  test "save/2 removes the tmp file when the save fails" do
+    persistence_dir =
+      Path.join(System.tmp_dir!(), "mobius_save_fail_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(persistence_dir)
+    on_exit(fn -> File.rm_rf!(persistence_dir) end)
+
+    table = :metrics_table_failed_save
+    ^table = MetricsTable.init(mobius_instance: table, persistence_dir: persistence_dir)
+    :ok = MetricsTable.put(table, [:doomed, :value], :last_value, 1)
+
+    # Occupy the destination path with a non-empty directory so the rename
+    # into place fails after the tmp file has been written.
+    File.mkdir_p!(Path.join([persistence_dir, "metrics_table", "occupied"]))
+
+    assert {:error, _reason} = MetricsTable.save(table, persistence_dir)
+    refute File.exists?(Path.join(persistence_dir, "metrics_table.tmp"))
+  end
+
   # Persisted metrics tables from older Mobius versions contain summary entries
   # with `:min` and `:max` keys. Loading those tables must still work — the
   # unused keys should be ignored and subsequent updates should produce the

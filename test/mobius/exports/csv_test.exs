@@ -64,6 +64,46 @@ defmodule Mobius.Exporters.CSVTest do
     assert csv_string == String.trim(expected_string, "\n")
   end
 
+  test "quotes fields containing commas, quotes, or newlines" do
+    metrics = [
+      %{timestamp: 1, type: :last_value, value: 10, tags: %{extra: "with, comma"}},
+      %{timestamp: 2, type: :last_value, value: 11, tags: %{extra: ~s(say "hi")}},
+      %{timestamp: 3, type: :last_value, value: 12, tags: %{extra: "line\nbreak"}}
+    ]
+
+    {:ok, csv_string} = CSV.export_metrics(metrics, tags: [:extra], metric_name: "test")
+
+    assert csv_string ==
+             Enum.join(
+               [
+                 "timestamp,name,type,value,extra",
+                 ~s(1,test,last_value,10,"with, comma"),
+                 ~s(2,test,last_value,11,"say ""hi"""),
+                 ~s(3,test,last_value,12,"line\nbreak")
+               ],
+               "\n"
+             )
+  end
+
+  test "no headers with an iodevice does not write a leading blank line",
+       %{metrics_no_tags: metrics} do
+    expected_string = """
+    1,test,last_value,10
+    2,test,last_value,13
+    4,test,last_value,15
+    8,test,last_value,16
+    """
+
+    assert capture_io(fn ->
+             CSV.export_metrics(metrics,
+               tags: [],
+               metric_name: "test",
+               headers: false,
+               iodevice: :stdio
+             )
+           end) == expected_string
+  end
+
   test "print to screen", %{metrics_no_tags: metrics} do
     expected_string = """
     timestamp,name,type,value
