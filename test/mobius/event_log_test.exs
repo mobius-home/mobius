@@ -94,6 +94,23 @@ defmodule Mobius.EventLogTest do
     assert EventLog.list(instance: instance) == events
   end
 
+  @tag :tmp_dir
+  @tag capture_log: true
+  test "save returns an error when the event log cannot be written", %{tmp_dir: tmp_dir} do
+    instance = :event_log_save_error
+
+    start_supervised!({Mobius, mobius_instance: instance, persistence_dir: tmp_dir})
+
+    EventsServer.insert(instance, Event.new("test", "a.b.c", %{a: 1}, %{}, timestamp: 1))
+
+    # A directory sits where the event log file should go, so the final
+    # rename cannot succeed and nothing is persisted.
+    persistence_path = Path.join(tmp_dir, to_string(instance))
+    File.mkdir_p!(Path.join(persistence_path, "event_log"))
+
+    assert {:error, _reason} = EventLog.save(instance: instance)
+  end
+
   test "parse/1 accepts uncompressed v1 payloads (backwards compat)" do
     events = [
       Event.new("test", "a.b.c", 123_123, %{a: 1}, %{}),

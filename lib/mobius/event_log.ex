@@ -68,7 +68,7 @@ defmodule Mobius.EventLog do
   The configured compression level for the instance is applied by the events
   server when it writes the file.
   """
-  @spec save([opt()]) :: :ok
+  @spec save([opt()]) :: :ok | {:error, reason :: term()}
   def save(opts \\ []) do
     instance = opts[:instance] || :mobius
 
