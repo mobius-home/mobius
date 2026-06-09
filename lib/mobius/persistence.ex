@@ -27,18 +27,13 @@ defmodule Mobius.Persistence do
   """
   @spec write_atomic(Path.t(), String.t(), iodata(), [opt()]) :: :ok | {:error, term()}
   def write_atomic(dir, filename, contents, opts \\ []) do
-    write_fun = Keyword.get(opts, :write_fun, &IO.binwrite/2)
-    sync_fun = Keyword.get(opts, :sync_fun, &:file.sync/1)
-
     _ = File.mkdir_p(dir)
     path = Path.join(dir, filename)
     tmp = path <> ".tmp"
 
     result =
       with {:ok, fd} <- File.open(tmp, [:write, :binary]),
-           :ok <- write_fun.(fd, contents),
-           :ok <- sync_fun.(fd),
-           :ok <- File.close(fd) do
+           :ok <- write_sync_close(fd, contents, opts) do
         File.rename(tmp, path)
       end
 
@@ -49,6 +44,24 @@ defmodule Mobius.Persistence do
       error ->
         _ = File.rm(tmp)
         error
+    end
+  end
+
+  # Close the device on every path — the callers are long-lived GenServers,
+  # so a descriptor leaked when the write or sync fails (disk full surfaces
+  # exactly there) would never be reclaimed.
+  defp write_sync_close(fd, contents, opts) do
+    write_fun = Keyword.get(opts, :write_fun, &IO.binwrite/2)
+    sync_fun = Keyword.get(opts, :sync_fun, &:file.sync/1)
+
+    result =
+      with :ok <- write_fun.(fd, contents) do
+        sync_fun.(fd)
+      end
+
+    case {result, File.close(fd)} do
+      {:ok, close_result} -> close_result
+      {error, _close_result} -> error
     end
   end
 end
