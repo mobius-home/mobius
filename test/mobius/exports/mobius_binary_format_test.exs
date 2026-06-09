@@ -1,6 +1,7 @@
 defmodule Mobius.Exports.MobiusBinaryFormatTest do
   use ExUnit.Case, async: true
 
+  alias Mobius.Exports
   alias Mobius.Exports.{MBFParseError, MobiusBinaryFormat}
 
   test "parsing version 1 Mobius Binary Format" do
@@ -13,6 +14,26 @@ defmodule Mobius.Exports.MobiusBinaryFormatTest do
       |> IO.iodata_to_binary()
 
     assert {:ok, ^metrics} = MobiusBinaryFormat.parse(mbf)
+  end
+
+  test "parsing metrics with float values" do
+    metrics = [
+      %{name: "a.b", type: :last_value, value: 1.5, tags: %{}, timestamp: 123}
+    ]
+
+    mbf =
+      MobiusBinaryFormat.to_iodata(metrics)
+      |> IO.iodata_to_binary()
+
+    assert {:ok, ^metrics} = Exports.parse_mbf(mbf)
+  end
+
+  test "parsing does not create atoms unknown to the VM" do
+    name = "mbf_nonexistent_" <> Integer.to_string(:erlang.unique_integer([:positive]))
+    payload = <<131, 100, byte_size(name)::16, name::binary>>
+
+    assert {:error, %MBFParseError{}} = Exports.parse_mbf(<<1, payload::binary>>)
+    assert_raise ArgumentError, fn -> String.to_existing_atom(name) end
   end
 
   test "error parsing mbf binary with wrong metric information" do
