@@ -172,4 +172,56 @@ defmodule Mobius.Metrics.MetricsTableTest do
            ] =
              MetricsTable.get_entries_by_metric_name(table, metric_name)
   end
+
+  describe "robustness when the table does not exist" do
+    # The table is created in Mobius.init/1 before any consumer starts, but a
+    # startup race or a restart of the table owner can still leave a consumer
+    # holding the instance name with no backing table. Access must degrade
+    # gracefully instead of crashing the caller (telemetry handlers, the
+    # periodic scraper, the registry's reconciliation).
+
+    test "exists?/1 reflects whether the table is present" do
+      table = :metrics_table_exists_check
+
+      refute MetricsTable.exists?(table)
+
+      MetricsTable.init(mobius_instance: table, persistence_dir: "/does/not/matter/here")
+
+      assert MetricsTable.exists?(table)
+    end
+
+    test "reads return empty instead of raising when the table is absent" do
+      absent = :metrics_table_never_created
+
+      assert [] == MetricsTable.get_entries(absent)
+      assert [] == MetricsTable.get_entries_by_metric_name(absent, "some.metric")
+    end
+
+    test "writes are dropped instead of raising when the table is absent" do
+      absent = :metrics_table_writes_dropped
+
+      assert :ok == MetricsTable.put(absent, [:a, :counter], :counter, 1)
+      assert :ok == MetricsTable.put(absent, [:a, :last], :last_value, 7)
+      assert :ok == MetricsTable.put(absent, [:a, :sum], :sum, 3)
+      assert :ok == MetricsTable.put(absent, [:a, :summary], :summary, 9)
+      assert :ok == MetricsTable.inc_counter(absent, [:a, :counter])
+      assert :ok == MetricsTable.update_sum(absent, [:a, :sum], 2)
+      assert :ok == MetricsTable.inc_histogram_bin(absent, [:a, :hist], {:hist, :pos, 1})
+      assert :ok == MetricsTable.remove(absent, [:a, :counter], :counter)
+    end
+
+    test "init/1 is idempotent and reuses an existing table" do
+      table = :metrics_table_idempotent_init
+
+      MetricsTable.init(mobius_instance: table, persistence_dir: "/does/not/matter/here")
+      :ok = MetricsTable.put(table, [:kept], :last_value, 1)
+
+      # Re-running init/1 (as happens on a supervisor restart) must not crash
+      # on the already-existing named table, and must not wipe existing data.
+      assert ^table = MetricsTable.init(mobius_instance: table, persistence_dir: "/nope")
+
+      assert [{"kept", :last_value, 1, %{}}] ==
+               MetricsTable.get_entries_by_metric_name(table, "kept")
+    end
+  end
 end
