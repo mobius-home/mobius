@@ -127,6 +127,34 @@ defmodule Mobius.MetricsTable do
   end
 
   @doc """
+  Clear all metrics and remove the persisted table file
+
+  Every recorded metric row is deleted, returning the table to the empty
+  state it had at boot. The resolved histogram configuration meta row is
+  preserved so newly recorded histograms keep using the configuration the
+  instance was started with. The persisted `metrics_table` file is removed
+  so a later save (or the save on shutdown) does not resurrect the cleared
+  data.
+  """
+  @spec reset(Mobius.instance(), Path.t()) :: :ok
+  def reset(instance, persistence_dir) do
+    configs =
+      case :ets.lookup(instance, @histogram_configs_key) do
+        [{@histogram_configs_key, configs}] -> configs
+        [] -> %{}
+      end
+
+    :ets.delete_all_objects(instance)
+    :ets.insert(instance, {@histogram_configs_key, configs})
+
+    path = Path.join(persistence_dir, "metrics_table")
+    _ = File.rm(path)
+    _ = File.rm(path <> ".tmp")
+
+    :ok
+  end
+
+  @doc """
   Put the metric information into the metric table
   """
   @spec put(

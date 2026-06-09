@@ -279,6 +279,38 @@ defmodule Mobius do
   end
 
   @doc """
+  Reset Mobius back to a clean state
+
+  This clears everything out for the instance without requiring a restart:
+
+  * the in-memory metrics table (current counters, sums, last values, and
+    summary/histogram data)
+  * the accumulated historical records (the in-memory RRD)
+  * the in-memory event log
+  * the persisted files on disk (`history`, `metrics_table`, and
+    `event_log`)
+
+  This is useful when repurposing a device whose historical data is no
+  longer meaningful, or while debugging and developing. The configured
+  metrics and events keep being tracked — only the recorded data is
+  discarded — so Mobius starts collecting fresh data immediately.
+
+  If you configured Mobius to use a different name then you can pass in your
+  custom name to ensure the right instance is reset.
+  """
+  @spec reset() :: :ok
+  def reset(), do: reset(@default_args[:mobius_instance])
+
+  @spec reset(instance()) :: :ok
+  def reset(instance) do
+    :ok = Scraper.reset(instance)
+    :ok = MetricsTable.Monitor.reset(instance)
+    :ok = EventLog.clear(instance: instance)
+
+    :ok
+  end
+
+  @doc """
   Get the latest metrics
 
   The latest metrics are the metrics recorded between the last query for the

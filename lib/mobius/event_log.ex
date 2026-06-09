@@ -53,6 +53,18 @@ defmodule Mobius.EventLog do
   end
 
   @doc """
+  Clear the event log
+
+  Empties the in-memory event log and removes the persisted event log file
+  for the instance.
+  """
+  @spec clear([opt()]) :: :ok
+  def clear(opts \\ []) do
+    instance = opts[:instance] || :mobius
+    EventsServer.clear(instance)
+  end
+
+  @doc """
   Parse the Mobius binary formatted event log
   """
   @spec parse(binary()) :: {:ok, [Event.t()]} | {:error, atom()}
