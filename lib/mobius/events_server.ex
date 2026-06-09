@@ -3,7 +3,7 @@ defmodule Mobius.EventsServer do
 
   use GenServer
 
-  alias Mobius.{Event, EventLog, TimeServer}
+  alias Mobius.{Event, EventLog, Persistence, TimeServer}
 
   require Logger
 
@@ -206,29 +206,12 @@ defmodule Mobius.EventsServer do
   end
 
   defp do_save(binary, state) do
-    # Write-to-tmp + fsync + rename so a power cut mid-write leaves the
-    # previous event log intact instead of a truncated one. The persistence
-    # directory may have been unavailable at boot (or gone away since), so
-    # re-create it on every attempt — saving recovers as soon as the
-    # filesystem allows.
-    _ = File.mkdir_p(state.persistence_dir)
-    path = make_file_path(state.persistence_dir)
-    tmp = path <> ".tmp"
-
-    result =
-      with {:ok, fd} <- File.open(tmp, [:write, :binary]),
-           :ok <- IO.binwrite(fd, binary),
-           :ok <- :file.sync(fd),
-           :ok <- File.close(fd) do
-        File.rename(tmp, path)
-      end
-
-    case result do
+    # See Mobius.Persistence for the write-to-tmp + fsync + rename details.
+    case Persistence.write_atomic(state.persistence_dir, @file_name, binary) do
       :ok ->
         :ok
 
       {:error, reason} ->
-        _ = File.rm(tmp)
         Logger.warning("[Mobius]: unable to save event log: #{inspect(reason)}")
         :ok
     end
