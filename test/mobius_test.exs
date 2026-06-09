@@ -30,6 +30,21 @@ defmodule MobiusTest do
   end
 
   @tag capture_log: true
+  @tag :tmp_dir
+  test "does not crash with a corrupt event log file", %{tmp_dir: tmp_dir} do
+    persistence_path = Path.join(tmp_dir, @default_instance_str)
+    File.mkdir_p!(persistence_path)
+
+    # A valid version byte followed by a payload that does not decode as a term
+    File.write!(Path.join(persistence_path, "event_log"), <<0x01, 255, 254, 253, 252>>)
+
+    assert {:ok, _pid} = start_supervised({Mobius, persistence_dir: tmp_dir, metrics: []})
+
+    # The corrupt log is dropped and the instance starts with an empty event log
+    assert Mobius.EventLog.list() == []
+  end
+
+  @tag capture_log: true
   test "boots without persistence when the persistence dir cannot be created" do
     # A file sits where the directory tree should go: mkdir_p cannot succeed.
     bad_parent = Path.join(@persistence_dir, "not_a_dir")

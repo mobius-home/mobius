@@ -90,7 +90,15 @@ defmodule Mobius.EventsServer do
         CircularBuffer.insert(buff, event)
       end)
     else
-      _ ->
+      {:error, :enoent} ->
+        # Event log file doesn't (yet) exist
+        CircularBuffer.new(log_size)
+
+      {:error, reason} ->
+        Logger.warning(
+          "[Mobius] Could not recover event log from file because #{inspect(reason)}"
+        )
+
         CircularBuffer.new(log_size)
     end
   end
