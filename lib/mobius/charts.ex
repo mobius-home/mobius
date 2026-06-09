@@ -243,10 +243,15 @@ defmodule Mobius.Charts do
   the same idea `DDSketch.delta/2` applies to histograms. A snapshot interval
   with no new reports contributes no point.
 
-      avg = Mobius.Charts.series("http.request.duration", {:summary, :average}, %{}, last: {1, :hour})
+  Returns `{:error, :unavailable}` when the instance is down or too busy to
+  answer (see `Mobius.Data`), and `{:error, {:invalid_summary_field, field}}`
+  for a summary field other than `:average`, `:std_dev`, or `:reports`.
+
+      {:ok, avg} = Mobius.Charts.series("http.request.duration", {:summary, :average}, %{}, last: {1, :hour})
       # avg.points => [%{timestamp: ..., value: 12.4}, ...]
   """
-  @spec series(Mobius.metric_name(), metric_type(), map(), [opt()]) :: series()
+  @spec series(Mobius.metric_name(), metric_type(), map(), [opt()]) ::
+          {:ok, series()} | {:error, term()}
   def series(metric_name, type, tags \\ %{}, opts \\ [])
 
   def series(metric_name, :summary, tags, opts) do
@@ -258,13 +263,16 @@ defmodule Mobius.Charts do
       |> Data.summary_deltas(metric_name, tags, from, to)
       |> Enum.map(fn {ts, delta} -> %{timestamp: ts, value: Summary.calculate(delta)} end)
 
-    %{
-      metric: metric_name,
-      type: :summary,
-      tags: tags,
-      window: %{from: from, to: to},
-      points: points
-    }
+    {:ok,
+     %{
+       metric: metric_name,
+       type: :summary,
+       tags: tags,
+       window: %{from: from, to: to},
+       points: points
+     }}
+  catch
+    :exit, _reason -> {:error, :unavailable}
   end
 
   def series(metric_name, {:summary, field} = type, tags, opts)
@@ -279,30 +287,39 @@ defmodule Mobius.Charts do
         %{timestamp: ts, value: Map.fetch!(Summary.calculate(delta), field)}
       end)
 
-    %{
-      metric: metric_name,
-      type: type,
-      tags: tags,
-      window: %{from: from, to: to},
-      points: points
-    }
+    {:ok,
+     %{
+       metric: metric_name,
+       type: type,
+       tags: tags,
+       window: %{from: from, to: to},
+       points: points
+     }}
+  catch
+    :exit, _reason -> {:error, :unavailable}
+  end
+
+  def series(_metric_name, {:summary, field}, _tags, _opts) do
+    {:error, {:invalid_summary_field, field}}
   end
 
   def series(metric_name, type, tags, opts) do
     {from, to} = Data.resolve_window(opts)
 
-    {:ok, rows} = Data.metrics(metric_name, type, tags, Keyword.merge(opts, from: from, to: to))
+    with {:ok, rows} <-
+           Data.metrics(metric_name, type, tags, Keyword.merge(opts, from: from, to: to)) do
+      points =
+        Enum.map(rows, fn %{timestamp: ts, value: value} -> %{timestamp: ts, value: value} end)
 
-    points =
-      Enum.map(rows, fn %{timestamp: ts, value: value} -> %{timestamp: ts, value: value} end)
-
-    %{
-      metric: metric_name,
-      type: type,
-      tags: tags,
-      window: %{from: from, to: to},
-      points: points
-    }
+      {:ok,
+       %{
+         metric: metric_name,
+         type: type,
+         tags: tags,
+         window: %{from: from, to: to},
+         points: points
+       }}
+    end
   end
 
   @doc """

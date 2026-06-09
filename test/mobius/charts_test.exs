@@ -170,7 +170,8 @@ defmodule Mobius.ChartsTest do
     :telemetry.execute([:device, :temp], %{celsius: 42.0}, %{})
     Process.sleep(@scrape_interval_ms)
 
-    series = Charts.series("device.temp.celsius", :last_value, %{}, mobius_instance: instance)
+    assert {:ok, series} =
+             Charts.series("device.temp.celsius", :last_value, %{}, mobius_instance: instance)
 
     assert series.metric == "device.temp.celsius"
     assert series.type == :last_value
