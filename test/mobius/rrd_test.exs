@@ -195,6 +195,42 @@ defmodule Mobius.RRDTest do
 
       assert RRD.load(RRD.new(@args), rrd_binary, histogram_configs: %{}) == {:ok, expected_rrd}
     end
+
+    test "compression_level changes the payload size but round-trips either way" do
+      # redundant data so compression has something to work with
+      rrd =
+        Enum.reduce(1..120, RRD.new(@args), fn ts, acc ->
+          RRD.insert(acc, ts, [{"vm.memory.total", :last_value, rem(ts, 10), %{}}])
+        end)
+
+      uncompressed = RRD.save(rrd, compression_level: 0) |> IO.iodata_to_binary()
+      compressed = RRD.save(rrd, compression_level: 9) |> IO.iodata_to_binary()
+
+      assert byte_size(compressed) < byte_size(uncompressed)
+      assert RRD.load(RRD.new(@args), uncompressed) == {:ok, rrd}
+      assert RRD.load(RRD.new(@args), compressed) == {:ok, rrd}
+    end
+
+    test "loads uncompressed v2 payloads (backwards compat)" do
+      v2_in_rrd =
+        RRD.new(@args)
+        |> RRD.insert(1234, [
+          %{name: "vm.memory.total", type: :last_value, value: 123, tags: %{}, timestamp: 1234}
+        ])
+        |> RRD.insert(3000, [
+          %{name: "vm.memory.total", type: :last_value, value: 124, tags: %{}, timestamp: 3000}
+        ])
+
+      expected_rrd =
+        RRD.new(@args)
+        |> RRD.insert(1234, {[{"vm.memory.total", :last_value, 123, %{}}], %{}})
+        |> RRD.insert(3000, {[{"vm.memory.total", :last_value, 124, %{}}], %{}})
+
+      uncompressed_binary =
+        IO.iodata_to_binary([2, :erlang.term_to_binary(RRD.all(v2_in_rrd))])
+
+      assert RRD.load(RRD.new(@args), uncompressed_binary) == {:ok, expected_rrd}
+    end
   end
 
   test "fails to load corrupt binaries" do

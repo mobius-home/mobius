@@ -41,9 +41,9 @@ defmodule Mobius.EventsServer do
   @doc """
   Save the event log to disk
   """
-  @spec save(Mobius.instance(), binary()) :: :ok
-  def save(instance \\ :mobius, binary) do
-    GenServer.call(name(instance), {:save, binary})
+  @spec save(Mobius.instance()) :: :ok
+  def save(instance \\ :mobius) do
+    GenServer.call(name(instance), :save)
   end
 
   @doc """
@@ -70,7 +70,8 @@ defmodule Mobius.EventsServer do
        persistence_dir: persistence_dir,
        size: event_log_size,
        out_of_time_buffer: out_of_time_buffer,
-       instance: args[:mobius_instance]
+       instance: args[:mobius_instance],
+       compression_level: args[:compression_level] || 9
      }}
   end
 
@@ -106,10 +107,8 @@ defmodule Mobius.EventsServer do
   # Synchronous so callers (and Mobius.save/1) only see :ok once the event
   # log is actually on disk — otherwise the write races a caller that reads
   # or removes the persistence dir right after save returns.
-  def handle_call({:save, binary}, _from, state) do
-    :ok = do_save(binary, state)
-
-    {:reply, :ok, state}
+  def handle_call(:save, _from, state) do
+    {:reply, persist(state), state}
   end
 
   @impl GenServer
@@ -170,8 +169,12 @@ defmodule Mobius.EventsServer do
 
   @impl GenServer
   def terminate(_reason, state) do
+    persist(state)
+  end
+
+  defp persist(state) do
     events = make_list(state.buffer, [])
-    bin = EventLog.events_to_binary(events)
+    bin = EventLog.events_to_binary(events, compression_level: state.compression_level)
 
     do_save(bin, state)
   end

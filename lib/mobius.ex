@@ -11,7 +11,12 @@ defmodule Mobius do
 
   require Logger
 
-  @default_args [mobius_instance: :mobius, persistence_dir: "/data", autosave_interval: nil]
+  @default_args [
+    mobius_instance: :mobius,
+    persistence_dir: "/data",
+    autosave_interval: nil,
+    compression_level: 9
+  ]
 
   @type time_unit() :: :second | :minute | :hour | :day
 
@@ -49,6 +54,10 @@ defmodule Mobius do
   * `:persistence_dir` - the top level directory where mobius will persist
   * `:autosave_interval` - time in seconds between automatic writes of the
      persistence data (default disabled) metric information
+  * `:compression_level` - the zlib level (`0..9`) used when compressing
+     persisted metric history and event log data. Higher levels trade more CPU
+     at save time for smaller files. Defaults to `9` (maximum compression). `0`
+     disables compression.
   * `:database` - the `Mobius.RRD.t()` to use. This will default to the default
      values found in `Mobius.RRD`
   * `:events` - a list of events for mobius to store in the event log
@@ -69,6 +78,7 @@ defmodule Mobius do
           {:mobius_instance, instance()}
           | {:metrics, [Metrics.t()]}
           | {:persistence_dir, binary()}
+          | {:compression_level, 0..9}
           | {:database, Mobius.RRD.t()}
           | {:events, [event_def()]}
           | {:event_log_size, integer()}

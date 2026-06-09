@@ -33,6 +33,7 @@ defmodule Mobius.RRD do
   """
 
   @serialization_version 3
+  @default_compression_level 9
 
   require Logger
 
@@ -393,10 +394,13 @@ defmodule Mobius.RRD do
   * `:histogram_configs` - the resolved sketch configuration per
     histogram-enabled metric, recorded in v3 files so `load/3` can detect
     histogram data produced under a different configuration
+  * `:compression_level` - the zlib level (`0..9`) used to compress the payload,
+    defaults to `9`. `0` disables compression.
   """
   @type save_opt() ::
           {:serialization_version, 1 | 2 | 3}
           | {:histogram_configs, %{histogram_config_key() => map()}}
+          | {:compression_level, 0..9}
 
   @doc """
   Serialize to an iolist
@@ -404,6 +408,7 @@ defmodule Mobius.RRD do
   @spec save(t(), [save_opt()]) :: iolist()
   def save(rrd, opts \\ []) do
     serialization_version = opts[:serialization_version] || @serialization_version
+    compression_level = opts[:compression_level] || @default_compression_level
 
     payload =
       if serialization_version >= 3 do
@@ -412,7 +417,7 @@ defmodule Mobius.RRD do
         all(rrd)
       end
 
-    [serialization_version, :erlang.term_to_iovec(payload)]
+    [serialization_version, :erlang.term_to_binary(payload, [{:compressed, compression_level}])]
   end
 
   @doc """

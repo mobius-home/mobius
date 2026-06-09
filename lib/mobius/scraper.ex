@@ -67,7 +67,10 @@ defmodule Mobius.Scraper do
     # relative_accuracy).
     args
     |> Keyword.take([:mobius_instance, :persistence_dir])
-    |> Enum.into(%{histogram_configs: Events.histogram_configs(args[:metrics] || [])})
+    |> Enum.into(%{
+      histogram_configs: Events.histogram_configs(args[:metrics] || []),
+      compression_level: args[:compression_level] || 9
+    })
   end
 
   defp make_database(state, args) do
@@ -265,7 +268,13 @@ defmodule Mobius.Scraper do
   defp save_to_persistence(state) do
     path = file(state)
     tmp = path <> ".tmp"
-    contents = RRD.save(state.database, histogram_configs: state.histogram_configs)
+
+    contents =
+      RRD.save(state.database,
+        histogram_configs: state.histogram_configs,
+        compression_level: state.compression_level
+      )
+
     _ = File.mkdir_p(state.persistence_dir)
 
     result =

@@ -23,7 +23,7 @@ defmodule Mobius.EventLogTest do
   end
 
   @tag :tmp_dir
-  test "to binary works (version 1)", %{tmp_dir: tmp_dir} do
+  test "to_binary round-trips through parse/1", %{tmp_dir: tmp_dir} do
     events = [
       Event.new("test", "a.b.c", 123_123, %{a: 1}, %{}),
       Event.new("test", "d.e.f", 123_124, %{a: 1}, %{})
@@ -31,11 +31,10 @@ defmodule Mobius.EventLogTest do
 
     load_event_log(:to_binary_works, tmp_dir, events)
 
-    expected_bin = <<0x01, :erlang.term_to_binary(events)::binary>>
-
     bin = EventLog.to_binary(instance: :to_binary_works)
 
-    assert bin == expected_bin
+    assert <<0x01, _payload::binary>> = bin
+    assert {:ok, ^events} = EventLog.parse(bin)
   end
 
   test "parses version 1" do
@@ -77,6 +76,17 @@ defmodule Mobius.EventLogTest do
     start_supervised!({Mobius, mobius_instance: instance, persistence_dir: tmp_dir})
 
     assert EventLog.list(instance: instance) == events
+  end
+
+  test "parse/1 accepts uncompressed v1 payloads (backwards compat)" do
+    events = [
+      Event.new("test", "a.b.c", 123_123, %{a: 1}, %{}),
+      Event.new("test", "d.e.f", 123_124, %{a: 1}, %{})
+    ]
+
+    bin = <<0x01, :erlang.term_to_binary(events)::binary>>
+
+    assert {:ok, ^events} = EventLog.parse(bin)
   end
 
   defp load_event_log(log_name, dir, events) do
