@@ -138,10 +138,18 @@ defmodule MobiusTest do
     {:ok, _pid} = start_supervised({Mobius, @default_args ++ [autosave_interval: 1]})
     refute File.exists?(Path.join(persistence_path, "history"))
 
-    # Sleep for a bit and check we autosaved in the meantime
-    Process.sleep(1_100)
-    assert File.exists?(Path.join(persistence_path, "history"))
-    assert File.exists?(Path.join(persistence_path, "metrics_table"))
+    # The 1 s autosave tick races a fixed sleep on slow CI hosts — poll for
+    # the files instead of sleeping an exact amount.
+    assert wait_for_file(Path.join(persistence_path, "history"))
+    assert wait_for_file(Path.join(persistence_path, "metrics_table"))
+  end
+
+  defp wait_for_file(path, timeout_ms \\ 3_000) do
+    cond do
+      File.exists?(path) -> true
+      timeout_ms <= 0 -> false
+      true -> Process.sleep(50) && wait_for_file(path, timeout_ms - 50)
+    end
   end
 
   test "a non-integer autosave_interval disables autosave with a warning" do
@@ -154,8 +162,9 @@ defmodule MobiusTest do
 
     # The AutoSave server must not be started at all — a float interval makes
     # :timer.send_interval/3 return {:error, :badarg}, silently disabling
-    # autosave while looking enabled.
-    refute Process.whereis(Module.concat(Mobius.AutoSave, :mobius))
+    # autosave while looking enabled. AutoSave registers through the process
+    # registry, so look it up there (Process.whereis would always be nil).
+    assert Registry.lookup(Mobius.ProcessRegistry, {Mobius.AutoSave, :mobius}) == []
   end
 
   describe "remove_all_data/1" do
