@@ -15,10 +15,15 @@ defmodule Mobius.Exports.MobiusBinaryFormat do
 
   @doc """
   Parse the given binary
+
+  The binary is decoded safely, so atoms in it must already exist in the
+  receiving VM. That holds for the Mobius-defined metric types and tag keys
+  exported by a Mobius peer. Binaries containing unknown atoms are rejected
+  as corrupt.
   """
   @spec parse(binary()) :: {:ok, [Mobius.metric()]} | {:error, Mobius.Exports.MBFParseError.t()}
   def parse(<<@format_version, metrics_bin::binary>>) do
-    metrics = :erlang.binary_to_term(metrics_bin)
+    metrics = :erlang.binary_to_term(metrics_bin, [:safe])
 
     if validate_metrics(metrics) do
       {:ok, metrics}
@@ -38,7 +43,7 @@ defmodule Mobius.Exports.MobiusBinaryFormat do
     Enum.all?(metrics, fn metric ->
       Enum.all?([:name, :tags, :timestamp, :type, :value], &Map.has_key?(metric, &1)) and
         is_binary(metric.name) and
-        is_integer(metric.value) and is_map(metric.tags) and
+        is_number(metric.value) and is_map(metric.tags) and
         is_integer(metric.timestamp) and valid_type?(metric.type)
     end)
   end
@@ -46,6 +51,6 @@ defmodule Mobius.Exports.MobiusBinaryFormat do
   defp validate_metrics(_metrics), do: false
 
   defp valid_type?(type) do
-    type in [:last_value, :counter, :sum, :summary]
+    type in [:last_value, :counter, :sum]
   end
 end
