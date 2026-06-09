@@ -211,6 +211,30 @@ defmodule Mobius.RRDTest do
       assert RRD.load(RRD.new(@args), compressed) == {:ok, rrd}
     end
 
+    @tag capture_log: true
+    test "load discards persisted entries with future timestamps" do
+      # A device that boots with a wrong-ahead clock (dead RTC battery)
+      # persists future-stamped entries. Once NTP steps the clock back,
+      # those entries rebuild the high-water marks past the present at
+      # load, so every new insert is silently dropped until wall-clock
+      # catches up — surviving reboots because the RRD is persisted.
+      now = 1_700_000_000
+      ten_years = 10 * 365 * 86_400
+      snapshot = {[{"vm.memory.total", :last_value, 123, %{}}], %{}}
+
+      saved_binary =
+        RRD.new(@args)
+        |> RRD.insert(now + ten_years, snapshot)
+        |> RRD.save()
+        |> IO.iodata_to_binary()
+
+      {:ok, loaded} = RRD.load(RRD.new(@args), saved_binary, now: now)
+
+      rrd = RRD.insert(loaded, now, snapshot)
+
+      assert RRD.all(rrd) == [{now, snapshot}]
+    end
+
     test "loads uncompressed v2 payloads (backwards compat)" do
       v2_in_rrd =
         RRD.new(@args)
