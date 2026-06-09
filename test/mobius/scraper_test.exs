@@ -8,9 +8,8 @@ defmodule Mobius.ScraperTest do
   defmodule FakeClock do
     @moduledoc false
 
-    # A Mobius.Clock whose answer the test can flip at runtime. The
-    # TimeServer polls from its own process, so the shared state lives in
-    # :persistent_term rather than test process state.
+    # The TimeServer polls from its own process, so the flippable answer
+    # lives in :persistent_term rather than test process state.
     @behaviour Mobius.Clock
 
     @key {__MODULE__, :synchronized?}
@@ -114,10 +113,8 @@ defmodule Mobius.ScraperTest do
   test "neither records nor loses history until the clock synchronizes", %{
     persistence_dir: persistence_dir
   } do
-    # A device with a clock module boots with valid persisted history but an
-    # unset clock (e.g. waiting for NTP). Scrapes taken now would carry
-    # garbage timestamps, so nothing may be recorded — and the loaded
-    # history must survive untouched until the clock syncs.
+    # Pre-sync scrapes would carry garbage timestamps, so nothing may be
+    # recorded — and the loaded history must survive untouched.
     instance = :scraper_unsynced_boot
     FakeClock.set(false)
     on_exit(&FakeClock.clear/0)
@@ -148,8 +145,6 @@ defmodule Mobius.ScraperTest do
 
     FakeClock.set(true)
 
-    # Once the TimeServer notices the sync, recording resumes on top of the
-    # loaded history.
     eventually(fn -> length(Scraper.all(instance)) > length(history) end)
 
     records = Scraper.all(instance)
@@ -161,10 +156,8 @@ defmodule Mobius.ScraperTest do
   test "recovers from future-stamped persisted history with no clock module", %{
     persistence_dir: persistence_dir
   } do
-    # Without a :clock module the TimeServer reports synchronized from boot,
-    # so a scrape stamped far below the loaded high-water marks means the
-    # wall clock stepped backwards since the history was recorded: the
-    # future entries are pruned and recording continues at the present.
+    # Without a :clock module the TimeServer reports synchronized from
+    # boot, so the far-below-marks scrape counts as a real backwards step.
     instance = :scraper_future_history
     now = System.system_time(:second)
     ten_years = 10 * 365 * 86_400
@@ -179,7 +172,6 @@ defmodule Mobius.ScraperTest do
 
     MetricsTable.put(instance, [:vm, :memory, :total], :last_value, 125)
 
-    # The future entry is gone and a present-time scrape took its place.
     eventually(fn ->
       case Scraper.all(instance) do
         [] -> false

@@ -38,11 +38,8 @@ defmodule Mobius.RRDTest do
   describe "insert_with_regression_recovery/3" do
     @tag capture_log: true
     test "recovers when loaded history is stamped in the future" do
-      # The original bug: a device records history under a wrong-ahead clock
-      # (dead RTC battery), persists it, and after NTP steps the clock back
-      # the loaded entries hold the high-water marks past the present —
-      # insert/3 silently drops every new scrape, surviving reboots because
-      # the RRD is persisted.
+      # History recorded under a wrong-ahead clock holds the high-water
+      # marks past the present, so plain insert/3 drops every new scrape.
       now = 1_700_000_000
       ten_years = 10 * 365 * 86_400
       future_snapshot = {[{"vm.memory.total", :last_value, 999, %{}}], %{}}

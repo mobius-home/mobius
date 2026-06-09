@@ -59,9 +59,8 @@ defmodule Mobius.Scraper do
     _ = :timer.send_interval(@interval, self(), :scrape)
     Process.flag(:trap_exit, true)
 
-    # Register before asking for the initial value so a sync that lands
-    # between the two calls arrives as a message instead of being missed
-    # (same order as Mobius.EventsServer).
+    # Register before reading the initial value so a sync landing between
+    # the two calls arrives as a message instead of being missed.
     :ok = TimeServer.register(args[:mobius_instance], self())
 
     state =
@@ -226,11 +225,8 @@ defmodule Mobius.Scraper do
   end
 
   @impl GenServer
-  # Scrapes taken before the clock synchronizes would carry garbage
-  # timestamps (e.g. 1970-era on a device waiting for NTP), so skip them
-  # entirely: they would either pollute the RRD or be dropped against the
-  # high-water marks of loaded valid history anyway. The metrics table
-  # keeps aggregating and recording picks up at the first post-sync scrape.
+  # Pre-sync scrapes would carry garbage timestamps (e.g. 1970-era before
+  # NTP), so skip them; recording picks up at the first post-sync scrape.
   def handle_info(:scrape, %{synced?: false} = state) do
     {:noreply, state}
   end
@@ -241,10 +237,7 @@ defmodule Mobius.Scraper do
         {:noreply, state}
 
       entries ->
-        # The clock is trusted here, so a timestamp far below the high-water
-        # marks means the wall clock stepped backwards (or persisted history
-        # was recorded under a wrong-ahead clock) and the RRD recovers by
-        # pruning everything above it.
+        # synced? is true here, so a far-backwards timestamp is a real step.
         ts = System.system_time(:second)
         snapshot = build_snapshot(entries)
         database = RRD.insert_with_regression_recovery(state.database, ts, snapshot)

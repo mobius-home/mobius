@@ -221,10 +221,8 @@ defmodule Mobius.RRD do
     end
   end
 
-  # Drop every entry stamped after ts. CircularBuffer has no removal, so each
-  # archive is rebuilt from its surviving entries. The high-water marks reset
-  # to zero — fresh-start semantics; the insert that follows re-establishes
-  # them from ts.
+  # CircularBuffer has no removal, so each archive is rebuilt from the
+  # entries at or before ts; the reset marks let the following insert land.
   defp prune_future(rrd, ts) do
     {day, dropped_day} = prune_buffer(rrd.day, rrd.day_capacity, ts)
     {hour, dropped_hour} = prune_buffer(rrd.hour, rrd.hour_capacity, ts)
