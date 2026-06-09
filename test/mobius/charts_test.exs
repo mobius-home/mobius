@@ -182,6 +182,40 @@ defmodule Mobius.ChartsTest do
     assert timestamps == Enum.sort(timestamps)
   end
 
+  test "series returns {:error, :unavailable} when the instance is not running" do
+    assert {:error, :unavailable} =
+             Charts.series("some.metric", :last_value, %{},
+               mobius_instance: :charts_not_running_test
+             )
+  end
+
+  test "series returns {:error, :unavailable} for summary types when the instance is not running" do
+    assert {:error, :unavailable} =
+             Charts.series("some.metric", :summary, %{},
+               mobius_instance: :charts_not_running_test
+             )
+
+    assert {:error, :unavailable} =
+             Charts.series("some.metric", {:summary, :average}, %{},
+               mobius_instance: :charts_not_running_test
+             )
+  end
+
+  @tag :tmp_dir
+  test "series rejects an unknown summary field", %{tmp_dir: tmp_dir} do
+    instance = :charts_series_bad_field
+    metrics = [Telemetry.Metrics.summary("http.request.duration", measurement: :duration)]
+    start_instance(instance, tmp_dir, metrics)
+
+    :telemetry.execute([:http, :request], %{duration: 12.0}, %{})
+    Process.sleep(@scrape_interval_ms)
+
+    assert {:error, {:invalid_summary_field, :p99}} =
+             Charts.series("http.request.duration", {:summary, :p99}, %{},
+               mobius_instance: instance
+             )
+  end
+
   @tag :tmp_dir
   test "latest returns the most recent value per metric and skips empty ones",
        %{tmp_dir: tmp_dir} do
