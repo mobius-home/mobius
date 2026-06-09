@@ -435,9 +435,8 @@ defmodule Mobius do
     query_opts = Keyword.put(opts, :mobius_instance, instance)
 
     with {:ok, type} <- resolve_type(metric_name, opts, instance),
-         :ok <- ensure_plottable(type) do
-      %{points: points} = Charts.series(metric_name, type, tags, query_opts)
-
+         :ok <- ensure_plottable(type),
+         {:ok, %{points: points}} <- Charts.series(metric_name, type, tags, query_opts) do
       case Plot.line(points, opts) do
         {:ok, chart} ->
           IO.puts([chart_header(metric_name, type, tags), "\n\n", chart])
@@ -526,4 +525,10 @@ defmodule Mobius do
     do:
       "Summary metrics are not plottable directly. Plot a field with " <>
         "type: {:summary, :average}, or use Mobius.current/2 for the histogram."
+
+  defp explain(:unavailable),
+    do: "The Mobius instance is not running or did not respond."
+
+  defp explain({:invalid_summary_field, field}),
+    do: "#{inspect(field)} is not a summary field. Use :average, :std_dev, or :reports."
 end
