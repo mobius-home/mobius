@@ -389,8 +389,6 @@ defmodule Mobius.RRD do
   @typedoc """
   Options for saving RRD into a binary
 
-  * `:serialization_version` - the version of serialization format, defaults to
-    most recent
   * `:histogram_configs` - the resolved sketch configuration per
     histogram-enabled metric, recorded in v3 files so `load/3` can detect
     histogram data produced under a different configuration
@@ -398,26 +396,36 @@ defmodule Mobius.RRD do
     defaults to `9`. `0` disables compression.
   """
   @type save_opt() ::
-          {:serialization_version, 1 | 2 | 3}
-          | {:histogram_configs, %{histogram_config_key() => map()}}
+          {:histogram_configs, %{histogram_config_key() => map()}}
           | {:compression_level, 0..9}
 
   @doc """
   Serialize to an iolist
+
+  Always writes the current serialization format. There is no
+  down-conversion to older formats: passing a `:serialization_version`
+  other than the current one raises `ArgumentError` rather than emitting
+  a file that `load/3` cannot read.
   """
   @spec save(t(), [save_opt()]) :: iolist()
   def save(rrd, opts \\ []) do
-    serialization_version = opts[:serialization_version] || @serialization_version
+    case Keyword.get(opts, :serialization_version, @serialization_version) do
+      @serialization_version ->
+        :ok
+
+      other ->
+        raise ArgumentError,
+              "save/2 only writes serialization version #{@serialization_version}, " <>
+                "got: #{inspect(other)}"
+    end
+
     compression_level = opts[:compression_level] || @default_compression_level
+    payload = %{configs: opts[:histogram_configs] || %{}, data: all(rrd)}
 
-    payload =
-      if serialization_version >= 3 do
-        %{configs: opts[:histogram_configs] || %{}, data: all(rrd)}
-      else
-        all(rrd)
-      end
-
-    [serialization_version, :erlang.term_to_binary(payload, [{:compressed, compression_level}])]
+    [
+      @serialization_version,
+      :erlang.term_to_binary(payload, [{:compressed, compression_level}])
+    ]
   end
 
   @doc """
