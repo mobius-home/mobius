@@ -241,6 +241,7 @@ defmodule Mobius do
   def info(instance) do
     instance
     |> MetricsTable.get_entries()
+    |> Enum.reject(fn {_metric_name, type, _value, _meta} -> histogram_bin?(type) end)
     |> Enum.group_by(fn {metric_name, _type, _value, meta} -> {metric_name, meta} end)
     |> Enum.each(fn {{metric_name, meta}, metrics} ->
       reports =
@@ -258,6 +259,11 @@ defmodule Mobius do
       |> IO.puts()
     end)
   end
+
+  # Histogram bin rows carry tuple types such as `{:hist, :pos, idx}` and
+  # `{:hist, :zero}`. They back the sketch for the metric's summary and are
+  # not meaningful as individual lines, so they are left out of the listing.
+  defp histogram_bin?(type), do: is_tuple(type) and elem(type, 0) == :hist
 
   defp format_value(:summary, summary_data) do
     Summary.calculate(summary_data)
