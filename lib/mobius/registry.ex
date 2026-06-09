@@ -2,7 +2,6 @@ defmodule Mobius.Registry do
   @moduledoc false
 
   use GenServer
-  require Logger
 
   alias Mobius.MetricsTable
   alias Telemetry.Metrics
