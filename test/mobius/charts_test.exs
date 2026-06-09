@@ -105,6 +105,32 @@ defmodule Mobius.ChartsTest do
   end
 
   @tag :tmp_dir
+  test "quantiles_over_time is not truncated to the default 60-day retention",
+       %{tmp_dir: tmp_dir} do
+    instance = :charts_qot_no_cap
+    start_instance(instance, tmp_dir, [histogram_metric("flash.write.duration", :duration)])
+
+    for n <- 1..10, do: :telemetry.execute([:flash, :write], %{duration: n * 1.0}, %{})
+    Process.sleep(@scrape_interval_ms * 2)
+
+    for n <- 100..119, do: :telemetry.execute([:flash, :write], %{duration: n * 1.0}, %{})
+    Process.sleep(@scrape_interval_ms * 2)
+
+    # The stored data lies more than 60 days before :to but inside the
+    # requested window. A hardcoded 60-day cap would silently drop it.
+    to = System.system_time(:second) + 61 * 86_400
+
+    assert {:ok, qot} =
+             Charts.quantiles_over_time("flash.write.duration", [0.5], %{},
+               mobius_instance: instance,
+               from: 0,
+               to: to
+             )
+
+    assert [%{quantile: 0.5, points: [_ | _]}] = qot.lines
+  end
+
+  @tag :tmp_dir
   @tag capture_log: true
   test "quantiles_over_time skips the interval across a counter reset", %{tmp_dir: tmp_dir} do
     instance = :charts_qot_reset

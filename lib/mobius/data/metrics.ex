@@ -5,7 +5,7 @@ defmodule Mobius.Data.Metrics do
   # stored records from the scraper for a window and filter them down to a
   # single metric, summarizing summary records on the way out.
 
-  alias Mobius.{Scraper, Summary}
+  alias Mobius.{Data, Scraper, Summary}
 
   @doc """
   Fetch the raw, un-delta'd rows for a metric over a window.
@@ -80,33 +80,7 @@ defmodule Mobius.Data.Metrics do
   end
 
   defp query_opts(opts) do
-    if opts[:from] do
-      Keyword.take(opts, [:from, :to])
-    else
-      last_ts(opts)
-    end
+    {from, to} = Data.resolve_window(opts)
+    [from: from, to: to]
   end
-
-  defp last_ts(opts) do
-    now = System.system_time(:second)
-
-    ts =
-      case opts[:last] do
-        nil ->
-          now - 180
-
-        {offset, unit} ->
-          now - offset * get_unit_offset(unit)
-
-        offset ->
-          now - offset
-      end
-
-    [from: ts]
-  end
-
-  defp get_unit_offset(:second), do: 1
-  defp get_unit_offset(:minute), do: 60
-  defp get_unit_offset(:hour), do: 3600
-  defp get_unit_offset(:day), do: 86400
 end
