@@ -3,10 +3,7 @@
 What's worth tracking on a device running Mobius, which metric type fits
 each signal, and which signals earn a histogram. The framing question for
 every metric: *when this device misbehaves in the field, what will I want
-to know?* You'll consume the answers in one of two ways — a human poking
-at `Mobius.info/0` and `Mobius.Exports.plot/4` over SSH, or an MBF dump
-(`Mobius.Exports.mbf/0`) shipped off-device after the fact. A metric
-nobody will query is pure cost.
+to know?* A metric nobody will query is pure cost.
 
 ## Choosing a metric type
 
@@ -15,8 +12,7 @@ one distinction matter more than anything else:
 
 - **Polled gauges** (e.g. `telemetry_poller` samples every 5 s) produce
   *at most one new value per scrape*. The RRD history already is your
-  time series — use `last_value`. A summary or histogram of a polled
-  gauge is a distribution of your poller's samples, not of your system.
+  time series — use `last_value`.
 - **Event-driven measurements** (a telemetry event per request, write,
   frame) can produce *many values between scrapes*. `last_value` would
   throw all but one away — use `summary`, and add a histogram when the
@@ -28,41 +24,26 @@ Then match the type to the question you'll ask:
 |---|---|
 | "What is it now? How has it trended?" | `last_value` |
 | "How many times did X happen?" / "How much in total?" | `counter` / `sum` |
-| "What's typical? How noisy?" | `summary` (avg, std_dev, min/max, count) |
+| "What's typical? How noisy?" | `summary` (avg, std_dev, count) |
 | "What's the P99? How many exceeded the budget?" | `summary` + histogram |
 
 ## BEAM metrics
 
 Add [`telemetry_poller`](https://hex.pm/packages/telemetry_poller) (Phoenix
-apps already have it). Out of the box it emits, every 5 seconds:
+apps already have it).
 
-| Event | Measurements |
-|---|---|
-| `[:vm, :memory]` | everything from `:erlang.memory/0` — `total`, `processes`, `binary`, `ets`, `atom`, `code`, … |
-| `[:vm, :total_run_queue_lengths]` | `total`, `cpu`, `io` |
-| `[:vm, :system_counts]` | `process_count`, `atom_count`, `port_count` (recent versions also emit the `*_limit` for each) |
-| `[:vm, :persistent_term]` | `count`, `memory` (telemetry_poller ≥ 1.1) |
-
-All of these are polled gauges → all `last_value`. A reasonable core set
-and what each one catches:
+A reasonable core set and what each one catches:
 
 ```elixir
 [
-  # Overall growth — the first chart to look at.
   Metrics.last_value("vm.memory.total", unit: :byte),
-  # Process heaps and mailboxes. A queue backing up shows here first.
   Metrics.last_value("vm.memory.processes", unit: :byte),
-  # Refc-binary leaks: a long-lived process holding slices of large
-  # binaries pins them forever. The classic BEAM memory leak.
   Metrics.last_value("vm.memory.binary", unit: :byte),
-  # Unbounded caches and tables.
   Metrics.last_value("vm.memory.ets", unit: :byte),
 
-  # Leak detectors: each should plateau shortly after boot.
-  # Any sustained slope is a bug.
   Metrics.last_value("vm.system_counts.process_count"),
-  Metrics.last_value("vm.system_counts.port_count"),   # sockets, files, NIF ports
-  Metrics.last_value("vm.system_counts.atom_count"),   # see below
+  Metrics.last_value("vm.system_counts.port_count"),
+  Metrics.last_value("vm.system_counts.atom_count"),
 
   # Scheduler backlog = CPU saturation. On a 1-core device any
   # sustained value above ~1 means work is queueing.
@@ -71,25 +52,17 @@ and what each one catches:
 ]
 ```
 
-### Atoms — yes, track them
+### Atoms
 
-Atom count is rarely charted in cloud deployments because deploys restart
-the VM long before a leak matters. Embedded flips that: with months of
-uptime, an atom leak is a *guaranteed* future crash. The atom table is
-never garbage-collected; when it hits the limit (default 1,048,576) the
-VM dies, taking your watchdog story with it.
+With months of uptime, an atom leak is a *guaranteed* future crash.
+The atom table is never garbage-collected; when it hits the limit
+(default 1,048,576) the VM dies.
 
-`telemetry_poller` emits `vm.system_counts.atom_count` by default —
-Phoenix LiveDashboard shows it on its home page, but few people record it
-over time. The signal is binary: atom count should plateau within minutes
+`telemetry_poller` emits `vm.system_counts.atom_count` by default.
+The signal is binary: atom count should plateau within minutes
 of boot once all modules are loaded. A slope means something is minting
-atoms from runtime data — `String.to_atom/1` on external input,
-`:erlang.binary_to_term/1` without `[:safe]`, dynamic module compilation,
-or a library converting config keys. Even a slow slope (a few atoms per
+atoms from runtime data. Even a slow slope (a few atoms per
 hour) is worth fixing on a device expected to run for a year.
-
-`last_value`, never a histogram — it's a monotonic trend gauge, and the
-trend *is* the answer.
 
 ### Worth adding by hand
 
@@ -121,9 +94,8 @@ Metrics.last_value("my_app.worker.memory", unit: :byte)
 ## Hardware metrics
 
 Nothing emits these for you — poll them yourself with a custom
-`telemetry_poller` measurement. All slow-moving trend gauges →
-`last_value`, polled at 30–60 s (faster gains nothing, and disk wear is
-a thing — these end up in Mobius's persisted history).
+`telemetry_poller` measurement. All slow-moving trend gauges with
+`last_value`.
 
 | Signal | Source | Why |
 |---|---|---|
@@ -157,28 +129,21 @@ Metrics.last_value("hw.cpu.temperature_c")
 
 Firmware updates, interface up/down, clock sync, reboot causes, button
 presses — these are *events*, not measurements. Don't model them as
-metrics; pass them in Mobius's `:events` argument (see the README) so
-they land in the event log with their tags, and you can line them up
-against the metric history. "Memory started climbing right after the
-firmware update" is exactly the correlation this split exists for.
+metrics.
 
 ## What deserves a histogram
 
 Histograms cost real memory and flash on a small device (see
 [Histogram configurations](histograms.md) for numbers), and they're
-opt-in per metric. Three tests — a metric should pass **all three**:
+opt-in per metric:
 
-1. **Event-driven, not polled.** A polled gauge gives the histogram one
-   sample per poll interval; the RRD history already captures that. A
-   histogram only earns its keep when many observations land between
-   scrapes and would otherwise collapse into one summary row.
-2. **The tail is the question.** If you'd ask "what's the level?" or
+1. **The tail is the question.** If you'd ask "what's the level?" or
    "what's the trend?", `last_value` answers it. If you'd ask "what's
    typical?", the summary average answers it. Histograms answer "what's
    the P99?", "how often did we blow the budget?", "is it bimodal?".
-3. **Someone will query a percentile.** On-device via
+2. **Someone will query a percentile.** On-device via
    `Mobius.Data.quantile/4` / `count_above/4` (alarms, adaptive
-   behavior), or off-device from an MBF dump (heatmaps, fleet SLOs). If
+   behavior), or off-device (heatmaps, fleet SLOs). If
    no code and no person will ever ask, the summary was enough.
 
 Applied to everything above:
@@ -188,7 +153,7 @@ Applied to everything above:
 | HTTP / API request duration | **yes** | Event-driven, high-rate, tail = the SLO |
 | Flash / file write duration | **yes** | Bimodal (cache hit vs erase cycle); "how often does the slow path fire?" is a distribution question |
 | Frame period / control-loop jitter | **yes** | Jitter *is* distribution shape; needs tight α — see [the FPS example](histograms.md#camera-fps-instrument-period-not-fps) |
-| Sensor / message processing duration | yes, if high-rate | Tens per second: worth it. A few per minute: summary min/max/avg already tells the story |
+| Sensor / message processing duration | yes, if high-rate | Tens per second: worth it. A few per minute: summary avg already tells the story |
 | Ecto query / queue time | yes, if you run a DB | `queue_time` tail exposes pool exhaustion |
 | `vm.memory.*` | no | Polled trend; the RRD is the history |
 | Run queue lengths | no | Polled — a histogram would profile your 5 s poller, not your scheduler spikes |
@@ -196,8 +161,8 @@ Applied to everything above:
 | Temperature, voltage, disk, signal | no | Slow-moving and autocorrelated; you care about now, max, and trend |
 | Counters and rates | no | A histogram of a cumulative counter is meaningless; per-interval rates are already in the RRD |
 
-Rule of thumb: **durations of things that happen often → histogram;
-levels of things you sample → last_value.** When a metric passes the
+Rule of thumb: **durations of things that happen often -> histogram;
+levels of things you sample -> last_value.** When a metric passes the
 tests, scope its range and accuracy deliberately — the defaults are far
 wider than any real signal needs. [Histogram
 configurations](histograms.md) covers tuning.
