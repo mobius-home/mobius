@@ -48,10 +48,14 @@ defmodule Mobius.EventsServer do
 
   @doc """
   Clear the event log and stored data
+
+  Empties the in-memory buffers and removes the persisted event log file.
+  Synchronous so callers only see `:ok` once the event log has actually
+  been cleared on disk.
   """
   @spec clear(Mobius.instance()) :: :ok
   def clear(instance \\ :mobius) do
-    GenServer.cast(name(instance), :reset)
+    GenServer.call(name(instance), :reset)
   end
 
   @impl GenServer
@@ -111,6 +115,20 @@ defmodule Mobius.EventsServer do
     {:reply, persist(state), state}
   end
 
+  def handle_call(:reset, _from, state) do
+    path = make_file_path(state.persistence_dir)
+    _ = File.rm(path)
+    _ = File.rm(path <> ".tmp")
+
+    # Empty both buffers, keeping the out-of-time buffer present only when
+    # the clock is still unsynchronized (mirrors how init/1 sets it up).
+    out_of_time_buffer =
+      if state.out_of_time_buffer, do: CircularBuffer.new(100), else: nil
+
+    {:reply, :ok,
+     %{state | buffer: CircularBuffer.new(state.size), out_of_time_buffer: out_of_time_buffer}}
+  end
+
   @impl GenServer
   def handle_cast({:insert_event, event}, state) do
     if TimeServer.synchronized?(state.instance) do
@@ -121,14 +139,6 @@ defmodule Mobius.EventsServer do
       out_of_time_buffer = CircularBuffer.insert(state.out_of_time_buffer, event)
       {:noreply, %{state | out_of_time_buffer: out_of_time_buffer}}
     end
-  end
-
-  def handle_cast(:reset, state) do
-    path = make_file_path(state.persistence_dir)
-
-    _ = File.rm(path)
-
-    {:noreply, %{state | buffer: CircularBuffer.new(state.size)}}
   end
 
   @impl GenServer

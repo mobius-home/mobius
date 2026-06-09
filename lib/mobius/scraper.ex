@@ -47,6 +47,12 @@ defmodule Mobius.Scraper do
   @spec save(Mobius.instance()) :: :ok | {:error, reason :: term()}
   def save(instance), do: GenServer.call(name(instance), :save)
 
+  @doc """
+  Clear all in-memory history and remove the persisted history file
+  """
+  @spec reset(Mobius.instance()) :: :ok
+  def reset(instance), do: GenServer.call(name(instance), :reset)
+
   @impl GenServer
   def init(args) do
     _ = :timer.send_interval(@interval, self(), :scrape)
@@ -74,11 +80,14 @@ defmodule Mobius.Scraper do
   end
 
   defp make_database(state, args) do
-    rrd =
-      args[:database]
-      |> load_data(state)
+    # Keep the pristine, empty database around so reset/1 can discard all
+    # stored data while preserving the configured resolution capacities.
+    empty = args[:database]
+    rrd = load_data(empty, state)
 
-    Map.put(state, :database, rrd)
+    state
+    |> Map.put(:database, rrd)
+    |> Map.put(:empty_database, empty)
   end
 
   defp load_data(database, state) do
@@ -184,6 +193,15 @@ defmodule Mobius.Scraper do
 
   def handle_call(:save, _from, state) do
     {:reply, save_to_persistence(state), state}
+  end
+
+  def handle_call(:reset, _from, state) do
+    # Drop the persisted history file so a later save (or the terminate
+    # save on shutdown) does not resurrect the data we just cleared.
+    _ = File.rm(file(state))
+    _ = File.rm(file(state) <> ".tmp")
+
+    {:reply, :ok, %{state | database: state.empty_database}}
   end
 
   defp query_snapshots(state, opts) do
