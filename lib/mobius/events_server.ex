@@ -192,12 +192,14 @@ defmodule Mobius.EventsServer do
   defp make_list(buffer, opts) do
     from = opts[:from] || 0
     to = opts[:to] || System.system_time(:second)
+    group = opts[:group]
 
     buffer
     |> CircularBuffer.to_list()
     |> Enum.sort_by(fn event -> event.timestamp end)
     |> Enum.filter(fn event ->
-      event.timestamp >= from && event.timestamp <= to
+      event.timestamp >= from && event.timestamp <= to &&
+        (group == nil || event.group == group)
     end)
   end
 

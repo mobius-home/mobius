@@ -72,7 +72,7 @@ defmodule Mobius.EventsTest do
     end
 
     @tag :tmp_dir
-    test "process measurements", %{tmp_dir: tmp_dir} do
+    test "process measurements with legacy :measurements_values key", %{tmp_dir: tmp_dir} do
       start_supervised!(
         {Mobius, mobius_instance: :process_measurements, persistence_dir: tmp_dir}
       )

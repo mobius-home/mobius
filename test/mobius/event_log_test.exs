@@ -141,6 +141,21 @@ defmodule Mobius.EventLogTest do
     end
 
     @tag :tmp_dir
+    test "filter by group", %{tmp_dir: tmp_dir} do
+      events = [
+        Event.new("test", "a.b.c", %{a: 1}, %{}, group: :network, timestamp: 1),
+        Event.new("test", "d.e.f", %{a: 1}, %{}, timestamp: 2),
+        Event.new("test", "g.h.i", %{a: 1}, %{}, group: :network, timestamp: 3)
+      ]
+
+      load_event_log(:filter_event_group, tmp_dir, events)
+
+      logged_events = EventLog.list(instance: :filter_event_group, group: :network)
+
+      assert logged_events == [List.first(events), List.last(events)]
+    end
+
+    @tag :tmp_dir
     test "provide complete time window", %{tmp_dir: tmp_dir} do
       events = [
         Event.new("test", "a.b.c", %{a: 1}, %{}, timestamp: 1),

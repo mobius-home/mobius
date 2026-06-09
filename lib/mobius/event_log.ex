@@ -10,8 +10,17 @@ defmodule Mobius.EventLog do
 
   @typedoc """
   Options to query the event log
+
+  * `:from` - the unix timestamp (in seconds) to start listing events from
+  * `:to` - the unix timestamp (in seconds) to list events until
+  * `:instance` - the Mobius instance to query (defaults to `:mobius`)
+  * `:group` - only list events that belong to this event group
   """
-  @type opt() :: {:from, integer()} | {:to, integer()} | {:instance, Mobius.instance()}
+  @type opt() ::
+          {:from, integer()}
+          | {:to, integer()}
+          | {:instance, Mobius.instance()}
+          | {:group, atom()}
 
   @doc """
   List the events in the event log

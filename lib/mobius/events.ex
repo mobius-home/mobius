@@ -311,14 +311,17 @@ defmodule Mobius.Events do
     measurements = process_measurements(measurements, opts)
     tags = get_event_tags(metadata, opts)
 
-    event = Mobius.Event.new(session, event, measurements, tags)
+    event = Mobius.Event.new(session, event, measurements, tags, Keyword.take(opts, [:group]))
 
     Mobius.EventsServer.insert(instance, event)
     :ok
   end
 
   defp process_measurements(measurements, opts) do
-    case opts[:measurements_values] do
+    # :measurements_values is a historical misspelling of the documented
+    # :measurement_values option, kept for backward compatibility. The
+    # documented key wins when both are given.
+    case opts[:measurement_values] || opts[:measurements_values] do
       nil ->
         measurements
 
