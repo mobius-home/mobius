@@ -60,6 +60,13 @@ any time. The public API SHOULD NOT be considered stable.
 
 ### Removed
 
+* Breaking change: `Mobius.get_latest_metrics/1`, `Mobius.get_latest_events/1`
+  and the `Mobius.ReportServer` process behind them. They were the cursor left
+  over from the remote reporter removed in v0.6.0 and nothing in Mobius used
+  them. A reporter that wants "everything since I last asked" should keep its
+  own cursor (a timestamp it persists) and query `Mobius.Data.metrics/4` and
+  `Mobius.EventLog.list/1` with `:from`/`:to`, which also survives a restart
+  where the in-memory cursor did not.
 * Breaking change: `:min` and `:max` from summary metric output. These
   values were never reset for the lifetime of the process, so a single
   outlier would taint every later query.

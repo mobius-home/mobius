@@ -5,7 +5,7 @@ defmodule Mobius do
 
   use Supervisor
 
-  alias Mobius.{Charts, Event, EventLog, MetricsTable, Plot, ReportServer, Scraper, Summary}
+  alias Mobius.{Charts, EventLog, MetricsTable, Plot, Scraper, Summary}
 
   alias Telemetry.Metrics
 
@@ -186,8 +186,7 @@ defmodule Mobius do
         {Mobius.MetricsTable.Monitor, args},
         {Mobius.EventsServer, args},
         {Mobius.Registry, args},
-        {Mobius.Scraper, args},
-        {Mobius.ReportServer, args}
+        {Mobius.Scraper, args}
       ]
       |> maybe_enable_autosave(args)
 
@@ -345,28 +344,6 @@ defmodule Mobius do
     :ok = EventLog.clear(instance: instance)
 
     :ok
-  end
-
-  @doc """
-  Get the latest metrics
-
-  The latest metrics are the metrics recorded between the last query for the
-  metrics and the query for the metrics that is being called.
-  """
-  @spec get_latest_metrics(Mobius.instance()) :: [metric()]
-  def get_latest_metrics(instance \\ :mobius) do
-    ReportServer.get_latest_metrics(instance)
-  end
-
-  @doc """
-  Get the latest events
-
-  The latest events are the events recorded between the last query for the
-  events and the query for the events that is being called.
-  """
-  @spec get_latest_events(Mobius.instance()) :: [Event.t()]
-  def get_latest_events(instance \\ :mobius) do
-    ReportServer.get_latest_events(instance)
   end
 
   @doc """
