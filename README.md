@@ -202,11 +202,23 @@ tuning grid, and the trade-offs between α and value range.
 
 ### Report metrics to a remote server
 
-Mobius allows sending metrics to a remote server. You can do this by passing the
-`:remote_reporter` option to Mobius. This is a module that implements the
-`Mobius.RemoteReporter` behaviour. Optionally, you can pass the
-`:remote_report_interval` option to specify how often to report metrics, by
-default this is every 1 minute.
+Mobius does not ship data anywhere itself; it hands you readings shaped for
+shipping and leaves the schedule, the transport and the bookkeeping to your
+own process. `Mobius.Data.readings/1` returns one flat `%{name => number}`
+map per step over a window, with counters as rates, summaries as per-step
+statistics and histograms as quantiles, so a remote system needs to know
+nothing about Mobius's types:
+
+```elixir
+{:ok, readings} = Mobius.Data.readings(from: cursor + 1, to: now - 1, step: :minute)
+# [%{timestamp: 1700000060, metrics: %{"vm.memory.total" => 83952736, "http.requests.rate" => 2.5}}, ...]
+```
+
+Keep a cursor (the last timestamp you sent) somewhere that survives a reboot,
+ask for everything after it, and advance it once the remote end has accepted
+the batch. Because Mobius retains history at coarser resolution the further
+back it goes, a device that was offline gets to send what it measured while
+it was gone.
 
 ### Events
 

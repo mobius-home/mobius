@@ -11,6 +11,16 @@ any time. The public API SHOULD NOT be considered stable.
 
 ### Added
 
+* `Mobius.Data.readings/1`: every metric as plain numbers, one flat
+  `%{timestamp:, metrics: %{name => number}}` per step over a window,
+  thinned from the stored scrapes rather than averaged. Counters and sums
+  come out as rates, summaries as per-step average/std_dev/reports,
+  histograms as quantiles, tags folded into the name (or renamed and
+  filtered through a `:key` function). Built for reporters that ship
+  Mobius data to a remote system from a cursor they keep themselves.
+* `Mobius.Scraper.snapshots/2`, the stored scrapes with records and
+  histogram payloads together, so consumers that delta consecutive
+  scrapes cannot have them split by a scrape landing between two calls.
 * `Mobius.remove_all_data/0` and `Mobius.remove_all_data/1` to clear
   everything out and return Mobius to a clean state without a restart: the
   in-memory metrics table, the accumulated history (RRD), the event log,
