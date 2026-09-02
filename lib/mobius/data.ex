@@ -31,7 +31,7 @@ defmodule Mobius.Data do
   crash.
   """
 
-  alias Mobius.Data.{Histogram, Metrics}
+  alias Mobius.Data.{Histogram, Metrics, Readings}
   alias Mobius.{Scraper, Summary}
 
   @typedoc """
@@ -73,6 +73,122 @@ defmodule Mobius.Data do
           std_dev: float(),
           reports: non_neg_integer()
         }
+
+  @typedoc """
+  The bucket width `readings/1` thins the stored scrapes to: a named unit or
+  a number of seconds.
+  """
+  @type step() :: :second | :minute | :hour | :day | pos_integer()
+
+  @typedoc """
+  What a reading's key names about its series, handed to the `:key` function
+  of `readings/1`:
+
+    * `nil` - a `last_value` gauge; the key names the value itself
+    * `:rate` - a `counter` or `sum`, as its rate of change over the step
+    * `:average` / `:std_dev` / `:reports` - one statistic of a `summary`
+      over the step
+    * `{:quantile, q}` - one quantile of a histogram over the step
+  """
+  @type reading_field() :: nil | :rate | :average | :std_dev | :reports | {:quantile, float()}
+
+  @typedoc """
+  Names a series in a reading. Return `nil` to leave it out.
+  """
+  @type key_fun() :: (Mobius.metric_name(), map(), reading_field() -> String.t() | nil)
+
+  @typedoc """
+  Options for `readings/1`, on top of the shared window options.
+
+    * `:step` - bucket width, default `:minute`
+    * `:rate_unit` - the denominator for counter and sum rates: `:second`
+      (default), `:minute` or `:hour`
+    * `:quantiles` - which quantiles to report for histogram metrics, default
+      `[0.5, 0.95, 0.99]`
+    * `:key` - how to name each series, see `t:key_fun/0`; the default is
+      described on `readings/1`
+  """
+  @type readings_opt() ::
+          opt()
+          | {:step, step()}
+          | {:rate_unit, :second | :minute | :hour}
+          | {:quantiles, [float()]}
+          | {:key, key_fun()}
+
+  @typedoc """
+  Every metric's value at one instant, as plain numbers keyed by name.
+  """
+  @type reading() :: %{timestamp: integer(), metrics: %{String.t() => number()}}
+
+  @doc """
+  Everything Mobius knows, one flat map of numbers per step, ready to ship.
+
+  The stored scrapes hold cumulative state at irregular density (one a
+  second for the last two minutes, one a minute behind that, one an hour
+  further back). `readings/1` turns that into what a remote system wants: an
+  ascending list of `%{timestamp: unix_seconds, metrics: %{name => number}}`,
+  one per `:step`, every metric type reduced to numbers that mean something
+  on their own:
+
+    * `last_value` gauges are carried as they are, under the metric's name.
+    * `counter` and `sum` are cumulative, so a threshold on the raw value is
+      meaningless; they are reported as the **rate** between this reading and
+      the previous one, per `:rate_unit`, under `name.rate`. A reading with no
+      predecessor, or one across which the counter fell (a reset), reports
+      nothing for that series.
+    * `summary` is a cumulative accumulator; each reading carries the
+      statistics of just the observations since the previous reading, as
+      `name.average`, `name.std_dev` and `name.reports`, and nothing when
+      there were none.
+    * histogram-enabled summaries add the requested `:quantiles` of the
+      observations since the previous reading, as `name.p50`, `name.p95`,
+      `name.p99` (`0.999` becomes `p99.9`).
+
+  Tags are folded into the name by the default key: the tag values, sorted
+  by tag key, joined with dots after the metric name, so
+  `vintage_net.tx_bytes` tagged `%{ifname: "wlan0"}` counted as a `sum`
+  becomes `"vintage_net.tx_bytes.wlan0.rate"`. Pass `:key` to rename, or to
+  drop a series by returning `nil`; it is the place for an allowlist.
+
+  ## Thinning
+
+  Within a step the earliest stored scrape is the reading; the rest are
+  skipped. Nothing is averaged. That is the right thing for gauges (a
+  sub-sample) and loses nothing for the cumulative types, because any two
+  scrapes delta to the exact totals between them. A step finer than what is
+  retained for part of the window (minutes asked for, only hours kept) simply
+  yields the readings that exist, so the density of a long window is not
+  uniform; consumers that vote on samples may want a coarser step for a
+  catch-up batch than for a routine one.
+
+  ## Shipping since a cursor
+
+  The window options are the cursor. A reporter that keeps "sent up to this
+  second" persistently asks for `from: cursor + 1, to: last_closed_second`,
+  ships what comes back, and advances the cursor only once the send is
+  accepted. Mobius keeps no such mark itself: a cursor is a fact about the
+  destination's copy of the data, one per destination.
+
+      {:ok, readings} = Mobius.Data.readings(from: cursor + 1, to: now - 1, step: :minute)
+      # => [%{timestamp: 1_700_000_060, metrics: %{"vm.memory.total" => 83952736, "http.requests.rate" => 2.5}}, ...]
+
+  Returns `{:error, :unavailable}` when the instance is down or too busy to
+  answer, like the rest of `Mobius.Data`.
+  """
+  @spec readings([readings_opt()]) :: {:ok, [reading()]} | {:error, :unavailable}
+  def readings(opts \\ []) do
+    instance = opts[:mobius_instance] || :mobius
+    {from, to} = resolve_window(opts)
+
+    # The whole history rather than the window: the reading at the start of
+    # the window needs the scrape before it to delta against.
+    snapshots = Scraper.snapshots(instance)
+    sketch_opts = Readings.sketch_opts_by_series(Mobius.Registry.metrics(instance))
+
+    {:ok, Readings.build(snapshots, sketch_opts, from, to, opts)}
+  catch
+    :exit, _reason -> {:error, :unavailable}
+  end
 
   @doc """
   Per-window summary statistics for a summary metric, ascending by timestamp.

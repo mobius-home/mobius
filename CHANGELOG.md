@@ -11,6 +11,16 @@ any time. The public API SHOULD NOT be considered stable.
 
 ### Added
 
+* `Mobius.Data.readings/1`: every metric as plain numbers, one flat
+  `%{timestamp:, metrics: %{name => number}}` per step over a window,
+  thinned from the stored scrapes rather than averaged. Counters and sums
+  come out as rates, summaries as per-step average/std_dev/reports,
+  histograms as quantiles, tags folded into the name (or renamed and
+  filtered through a `:key` function). Built for reporters that ship
+  Mobius data to a remote system from a cursor they keep themselves.
+* `Mobius.Scraper.snapshots/2`, the stored scrapes with records and
+  histogram payloads together, so consumers that delta consecutive
+  scrapes cannot have them split by a scrape landing between two calls.
 * `Mobius.remove_all_data/0` and `Mobius.remove_all_data/1` to clear
   everything out and return Mobius to a clean state without a restart: the
   in-memory metrics table, the accumulated history (RRD), the event log,
@@ -60,6 +70,13 @@ any time. The public API SHOULD NOT be considered stable.
 
 ### Removed
 
+* Breaking change: `Mobius.get_latest_metrics/1`, `Mobius.get_latest_events/1`
+  and the `Mobius.ReportServer` process behind them. They were the cursor left
+  over from the remote reporter removed in v0.6.0 and nothing in Mobius used
+  them. A reporter that wants "everything since I last asked" should keep its
+  own cursor (a timestamp it persists) and query `Mobius.Data.metrics/4` and
+  `Mobius.EventLog.list/1` with `:from`/`:to`, which also survives a restart
+  where the in-memory cursor did not.
 * Breaking change: `:min` and `:max` from summary metric output. These
   values were never reset for the lifetime of the process, so a single
   outlier would taint every later query.

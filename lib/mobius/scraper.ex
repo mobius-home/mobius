@@ -51,6 +51,22 @@ defmodule Mobius.Scraper do
   end
 
   @doc """
+  Get the stored scrapes themselves, oldest first
+
+  Each entry is `{timestamp, {records, histograms}}`: the packed
+  `t:Mobius.metric_record/0` list and the per-series histogram payload map
+  captured by one scrape. `all/2` and `all_histograms/2` are each one half of
+  this; callers that need both halves of the *same* scrapes (anything that
+  deltas cumulative state between consecutive scrapes) take them together
+  here so a scrape landing between two calls cannot split them.
+  """
+  @spec snapshots(Mobius.instance(), [all_opt()]) ::
+          [{Mobius.timestamp(), {[Mobius.metric_record()], histograms()}}]
+  def snapshots(instance, opts \\ []) do
+    GenServer.call(name(instance), {:get_snapshots, opts})
+  end
+
+  @doc """
   Persist the metrics to disk
   """
   @spec save(Mobius.instance()) :: :ok | {:error, reason :: term()}
@@ -230,6 +246,19 @@ defmodule Mobius.Scraper do
   def handle_call({:get_histograms, opts}, _from, state) do
     snapshots = query_snapshots(state, opts)
     {:reply, to_histograms_list(snapshots), state}
+  end
+
+  def handle_call({:get_snapshots, opts}, _from, state) do
+    snapshots =
+      state
+      |> query_snapshots(opts)
+      |> Enum.map(fn
+        {_ts, {_records, _histograms}} = snapshot -> snapshot
+        # Tolerate the legacy pre-v3 shape just in case.
+        {ts, records} when is_list(records) -> {ts, {records, %{}}}
+      end)
+
+    {:reply, snapshots, state}
   end
 
   def handle_call(:history_rolled_off?, _from, state) do
