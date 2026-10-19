@@ -209,11 +209,11 @@ defmodule Mobius.Data do
 
   @doc false
   # Per-window summary deltas as `{end_ts, Summary.data()}` ascending. A summary
-  # record is a cumulative accumulator (sum / sum² / report count since the
+  # record is a cumulative accumulator (mean / M2 / report count since the
   # metric started), so each consecutive pair of snapshots yields the statistics
-  # for just that window by subtraction. Pairs with no new reports are skipped,
-  # and a negative report delta (the accumulator reset, e.g. after a reboot) is
-  # skipped too.
+  # for just that window via `Summary.subtract/2`. Pairs with no new reports
+  # are skipped, and a negative report delta (the accumulator reset, e.g. after
+  # a reboot) is skipped too.
   #
   # `Mobius.Charts.series/4` consumes this directly to build its summary line
   # points, so the windowing logic lives here, once.
@@ -232,16 +232,8 @@ defmodule Mobius.Data do
     |> Enum.chunk_every(2, 1, :discard)
     |> Enum.flat_map(fn
       [{_t0, earlier}, {t1, later}] when t1 >= from ->
-        reports = later.reports - earlier.reports
-
-        if reports > 0 do
-          delta = %{
-            accumulated: later.accumulated - earlier.accumulated,
-            accumulated_sqrd: later.accumulated_sqrd - earlier.accumulated_sqrd,
-            reports: reports
-          }
-
-          [{t1, delta}]
+        if later.reports > earlier.reports do
+          [{t1, Summary.subtract(later, earlier)}]
         else
           []
         end

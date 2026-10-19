@@ -4,23 +4,12 @@ defmodule Mobius.SummaryTest do
   alias Mobius.Summary
 
   test "create new summary data from a measurement" do
-    expected_summary_data = %{
-      reports: 1,
-      accumulated: 100,
-      accumulated_sqrd: 10000
-    }
-
-    assert expected_summary_data == Summary.new(100)
+    assert %{reports: 1, shift: 100, mean: +0.0, m2: +0.0} == Summary.new(100)
   end
 
-  test "update one with a new measurement" do
-    expected_summary_data = %{
-      reports: 1,
-      accumulated: 100,
-      accumulated_sqrd: 10000
-    }
-
-    assert expected_summary_data == Summary.new(100)
+  test "update summary data with a new measurement" do
+    assert %{reports: 2, shift: 100, mean: 150.0, m2: 45_000.0} ==
+             100 |> Summary.new() |> Summary.update(400)
   end
 
   test "calculate summary from summary data" do
@@ -53,38 +42,71 @@ defmodule Mobius.SummaryTest do
     assert %{reports: 3} = Summary.calculate(summary_data)
   end
 
-  # The naive sum-of-squares variance can go negative through catastrophic
-  # cancellation when large float values flow through, which would make
-  # :math.sqrt/1 raise. calculate/1 must clamp the operand at 0. The data
-  # below is crafted so the unclamped operand is negative.
-  test "calculate clamps a negative naive variance operand instead of raising" do
-    # Two close, large float values. Their true spread is tiny, but the
-    # stored sum-of-squares loses enough precision that the naive variance
-    # operand comes out negative.
-    a = :math.pow(10, 12) + 5.0
-    b = :math.pow(10, 12) + 6.0
-    sum = a + b
-    accumulated_sqrd = a * a + b * b
-    n = 2
+  # https://github.com/mobius-home/mobius/issues/152: `system_time`-shaped
+  # measurements (~10^12, a step of 1 apart). The old sum-of-squares variance
+  # cancelled to a negative number here and :math.sqrt/1 raised.
+  test "calculate is accurate for large, closely spaced measurements" do
+    summary_data =
+      1_788_878_897_448
+      |> Summary.new()
+      |> Summary.update(1_788_878_897_449)
+      |> Summary.update(1_788_878_897_450)
 
-    data = %{accumulated: sum, accumulated_sqrd: accumulated_sqrd, reports: n}
-
-    # Guard: the unclamped formula must actually go negative for this case,
-    # so :math.sqrt/1 would raise without the clamp. Compute the operand from
-    # the stored map so the analyzer can't fold it to a negative literal.
-    %{accumulated: s, accumulated_sqrd: sq, reports: r} = data
-    naive_operand = (sq - s * s / r) / (r - 1)
-    assert naive_operand < 0
-    assert_raise ArithmeticError, fn -> :math.sqrt(naive_operand) end
-
-    assert %{std_dev: +0.0} = Summary.calculate(data)
+    assert %{average: 1_788_878_897_449.0, std_dev: 1.0, reports: 3} ==
+             Summary.calculate(summary_data)
   end
 
-  # Persisted summary data from older versions of Mobius carried `:min` and
-  # `:max` keys. Loading that data must continue to work — the unused keys
-  # should be silently ignored.
-  describe "loading legacy summary data with :min/:max" do
-    test "calculate ignores legacy min/max keys" do
+  test "calculate is accurate for large, closely spaced float measurements" do
+    summary_data =
+      Enum.reduce(1..99, Summary.new(1.0e12), &Summary.update(&2, 1.0e12 + &1 * 0.5))
+
+    # 0, 0.5, ..., 49.5 offset from 10^12: sample std dev of 0..99 halved
+    expected = :math.sqrt(100 * 101 / 12) / 2
+
+    assert %{reports: 100, std_dev: std_dev} = Summary.calculate(summary_data)
+    assert_in_delta std_dev, expected, 1.0e-6
+  end
+
+  describe "subtract/2" do
+    test "yields the summary of only the reports between two snapshots" do
+      base = 1_788_878_897_448
+      earlier = Enum.reduce(1..9, Summary.new(base), &Summary.update(&2, base + &1))
+      later = Enum.reduce([7, 9], earlier, &Summary.update(&2, base + &1))
+
+      assert %{average: average, std_dev: std_dev, reports: 2} =
+               later |> Summary.subtract(earlier) |> Summary.calculate()
+
+      assert_in_delta average, base + 8, 1.0e-3
+      assert_in_delta std_dev, :math.sqrt(2), 1.0e-9
+    end
+
+    test "matches accumulating the window on its own" do
+      earlier = Enum.reduce([3, 8, 1], Summary.new(5), &Summary.update(&2, &1))
+      later = Enum.reduce([10, 20, 60], earlier, &Summary.update(&2, &1))
+      window = Enum.reduce([20, 60], Summary.new(10), &Summary.update(&2, &1))
+
+      assert %{average: avg, std_dev: std_dev, reports: 3} =
+               later |> Summary.subtract(earlier) |> Summary.calculate()
+
+      expected = Summary.calculate(window)
+      assert_in_delta avg, expected.average, 1.0e-9
+      assert_in_delta std_dev, expected.std_dev, 1.0e-9
+    end
+
+    test "accepts a legacy snapshot as the earlier side" do
+      legacy = %{reports: 2, accumulated: 500, accumulated_sqrd: 170_000}
+      later = legacy |> Summary.update(10) |> Summary.update(20)
+
+      assert %{average: 15.0, reports: 2} =
+               later |> Summary.subtract(legacy) |> Summary.calculate()
+    end
+  end
+
+  # Persisted summary data from older versions of Mobius stores the running
+  # sum and sum of squares, and older still also carried `:min` and `:max`.
+  # Loading that data must continue to work.
+  describe "loading legacy summary data" do
+    test "calculate converts legacy sums and ignores min/max keys" do
       legacy_data = %{
         reports: 2,
         accumulated: 500,
@@ -97,7 +119,7 @@ defmodule Mobius.SummaryTest do
                Summary.calculate(legacy_data)
     end
 
-    test "update drops legacy min/max keys and keeps producing correct results" do
+    test "update converts legacy data and keeps producing correct results" do
       legacy_data = %{
         reports: 1,
         accumulated: 100,
@@ -108,7 +130,7 @@ defmodule Mobius.SummaryTest do
 
       updated = Summary.update(legacy_data, 400)
 
-      assert updated == %{reports: 2, accumulated: 500, accumulated_sqrd: 170_000}
+      assert updated == %{reports: 2, shift: 0, mean: 250.0, m2: 45_000.0}
 
       assert %{average: 250.0, std_dev: 212.13203435596427, reports: 2} ==
                Summary.calculate(updated)

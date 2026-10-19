@@ -91,12 +91,12 @@ defmodule Mobius.Metrics.MetricsTableTest do
     metric_name = "summary"
     :ok = MetricsTable.put(table, [:summary], :summary, 100)
 
-    assert [{^metric_name, :summary, %{accumulated: 100, reports: 1}, %{}}] =
+    assert [{^metric_name, :summary, %{shift: 100, mean: +0.0, m2: +0.0, reports: 1}, %{}}] =
              MetricsTable.get_entries_by_metric_name(table, metric_name)
 
     :ok = MetricsTable.put(table, [:summary], :summary, 120)
 
-    assert [{^metric_name, :summary, %{accumulated: 220, reports: 2}, %{}}] =
+    assert [{^metric_name, :summary, %{shift: 100, mean: 10.0, m2: 200.0, reports: 2}, %{}}] =
              MetricsTable.get_entries_by_metric_name(table, metric_name)
   end
 
@@ -186,10 +186,13 @@ defmodule Mobius.Metrics.MetricsTableTest do
     :ok = MetricsTable.put(table, [:legacy, :summary], :summary, 200)
 
     assert [
-             {^metric_name, :summary, %{accumulated: 700, accumulated_sqrd: 210_000, reports: 3},
-              %{}}
+             {^metric_name, :summary, %{shift: 0, mean: mean, m2: m2, reports: 3}, %{}}
            ] =
              MetricsTable.get_entries_by_metric_name(table, metric_name)
+
+    # Σx² − (Σx)²/n for 100, 400, 200
+    assert_in_delta mean, 700 / 3, 1.0e-9
+    assert_in_delta m2, 210_000 - 700 * 700 / 3, 1.0e-9
   end
 
   describe "robustness when the table does not exist" do
