@@ -264,7 +264,7 @@ defmodule Mobius.RRD do
   @typedoc """
   Identity of a histogram-enabled metric definition: name plus sorted tag keys.
   """
-  @type histogram_config_key() :: {Mobius.metric_name(), [atom()]}
+  @type histogram_config_key() :: {Mobius.metric_name(), [atom()] | :dynamic}
 
   @typedoc """
   Options for loading a persisted RRD
@@ -384,7 +384,7 @@ defmodule Mobius.RRD do
         :ok
 
       true ->
-        config_key = Mobius.Events.config_key(name, Map.keys(tags))
+        config_key = Mobius.Events.series_config_key(current_configs, name, Map.keys(tags))
         current = Map.get(current_configs, config_key)
 
         if current != nil and Map.get(persisted_configs, config_key) == current do

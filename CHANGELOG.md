@@ -7,6 +7,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > Major version zero (0.y.z) is for initial development. Anything MAY change at
 any time. The public API SHOULD NOT be considered stable.
 
+## Unreleased
+
+### Added
+
+* Support for function `:tags` from `Telemetry.Metrics` 1.2, where `:tags`
+  is a function of the event metadata that returns the tag map. Such
+  metrics are recorded, queried, kept across restarts (including their
+  histogram data) and listed with `tags: :dynamic` by
+  `Mobius.Charts.list_metrics/1` and `Mobius.metrics/1`, since their tag
+  keys are only known per event. Previously such metrics were never
+  recorded and every event logged an error.
+
 ## [v0.8.0] - 2026-11-17
 
 ### Added

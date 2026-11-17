@@ -367,4 +367,51 @@ defmodule Mobius.EventsTest do
       assert {:hist, :zero} in types
     end
   end
+
+  describe "function tags" do
+    test "records the tag map the function returns", %{table: table} do
+      name = "events.test.fn.tags"
+
+      metric =
+        Metrics.last_value(name,
+          measurement: :value,
+          tags: fn metadata -> %{route: metadata.conn.route} end
+        )
+
+      config = Events.metric_handler_config(table, [metric])
+
+      :ok =
+        Events.handle_metrics(
+          [:events, :test, :fn],
+          %{value: 7},
+          %{conn: %{route: "/a"}, other: 1},
+          config
+        )
+
+      assert [{^name, :last_value, 7, %{route: "/a"}}] =
+               MetricsTable.get_entries_by_metric_name(table, name)
+    end
+
+    @tag capture_log: true
+    test "a function that does not return a map must not detach the handler", %{table: table} do
+      event = [:events, :test, :fn, :bad]
+      handler_id = {__MODULE__, event, self()}
+
+      bad = Metrics.last_value("events.test.fn.bad.tags", tags: fn _ -> [:not, :a, :map] end)
+      good = Metrics.last_value("events.test.fn.bad.value", measurement: :value)
+
+      config = Events.metric_handler_config(table, [bad, good])
+      :ok = :telemetry.attach(handler_id, event, &Events.handle_metrics/4, config)
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      :telemetry.execute(event, %{value: 1}, %{})
+      :telemetry.execute(event, %{value: 42}, %{})
+
+      assert Enum.any?(:telemetry.list_handlers(event), &(&1.id == handler_id))
+      assert [] = MetricsTable.get_entries_by_metric_name(table, "events.test.fn.bad.tags")
+
+      assert [{"events.test.fn.bad.value", :last_value, 42, %{}}] =
+               MetricsTable.get_entries_by_metric_name(table, "events.test.fn.bad.value")
+    end
+  end
 end

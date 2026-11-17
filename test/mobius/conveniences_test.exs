@@ -43,6 +43,21 @@ defmodule Mobius.ConveniencesTest do
   end
 
   @tag :tmp_dir
+  test "metrics/1 marks function tags as dynamic", %{tmp_dir: tmp_dir} do
+    instance = :conv_metrics_fn_tags
+
+    start_instance(instance, tmp_dir, [
+      Telemetry.Metrics.counter("http.request.count", tags: &Map.take(&1, [:route]))
+    ])
+
+    assert [%{metric: "http.request.count", tags: :dynamic}] =
+             Mobius.Charts.list_metrics(instance)
+
+    output = capture_io(fn -> assert :ok = Mobius.metrics(instance) end)
+    assert output =~ "tags: :dynamic"
+  end
+
+  @tag :tmp_dir
   test "metrics/1 says so when nothing is tracked", %{tmp_dir: tmp_dir} do
     instance = :conv_metrics_empty
     start_instance(instance, tmp_dir, [])

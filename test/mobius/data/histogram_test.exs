@@ -425,4 +425,52 @@ defmodule Mobius.Data.HistogramTest do
     assert err <= tol + 1.0e-9,
            "expected #{actual} within #{tol} of #{expected}, got relative error #{err}"
   end
+
+  @tag :tmp_dir
+  test "function-tag metrics are queryable and survive a restart", %{tmp_dir: tmp_dir} do
+    instance = :mobius_histogram_fn_tags
+
+    metrics = [
+      Telemetry.Metrics.summary("fn.tags.duration",
+        measurement: :duration,
+        tags: &Map.take(&1, [:route]),
+        reporter_options: [histogram: [max_indexable_value: 1.0e9]]
+      )
+    ]
+
+    start_args = [mobius_instance: instance, persistence_dir: tmp_dir, metrics: metrics]
+    {:ok, _} = start_supervised({Mobius, start_args})
+
+    for n <- 1..30, do: :telemetry.execute([:fn, :tags], %{duration: n * 1.0}, %{route: "/a"})
+    for n <- 1..20, do: :telemetry.execute([:fn, :tags], %{duration: n * 1.0}, %{route: "/b"})
+    Process.sleep(@scrape_interval_ms)
+
+    assert {:ok, a} =
+             Data.histogram("fn.tags.duration", %{route: "/a"}, mobius_instance: instance)
+
+    assert {:ok, b} =
+             Data.histogram("fn.tags.duration", %{route: "/b"}, mobius_instance: instance)
+
+    assert DDSketch.total_count(a) == 30
+    assert DDSketch.total_count(b) == 20
+
+    # Persisted histogram data is checked against the current config on load;
+    # function-tag series must still find it.
+    :ok = stop_supervised(Mobius)
+    {:ok, _} = start_supervised({Mobius, start_args})
+    Process.sleep(@scrape_interval_ms)
+
+    assert {:ok, a} =
+             Data.histogram("fn.tags.duration", %{route: "/a"}, mobius_instance: instance)
+
+    assert DDSketch.total_count(a) == 30
+
+    :telemetry.execute([:fn, :tags], %{duration: 5.0}, %{route: "/a"})
+    Process.sleep(@scrape_interval_ms)
+
+    assert {:ok, a} =
+             Data.histogram("fn.tags.duration", %{route: "/a"}, mobius_instance: instance)
+
+    assert DDSketch.total_count(a) == 31
+  end
 end

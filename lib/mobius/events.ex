@@ -211,8 +211,26 @@ defmodule Mobius.Events do
   end
 
   @doc """
+  The sorted tag keys of a metric definition, or `:dynamic` when `:tags` is
+  a function of the event metadata (`Telemetry.Metrics` 1.2+), in which case
+  the keys are only known per event.
+  """
+  @spec tag_keys(Metrics.t()) :: [atom()] | :dynamic
+  def tag_keys(%{tags: tags}) when is_function(tags, 1), do: :dynamic
+  def tag_keys(%{tags: tags}), do: Enum.sort(tags)
+
+  @doc """
+  Whether a series with `tag_keys` can belong to a metric definition whose
+  tag keys are `metric_tag_keys` (as returned by `tag_keys/1`)
+  """
+  @spec tag_keys_match?([atom()] | :dynamic, [atom()]) :: boolean()
+  def tag_keys_match?(:dynamic, _tag_keys), do: true
+  def tag_keys_match?(metric_tag_keys, tag_keys), do: metric_tag_keys == Enum.sort(tag_keys)
+
+  @doc """
   Canonical identity of a histogram-enabled metric definition: the
-  dotted metric name and its sorted tag keys.
+  dotted metric name and its sorted tag keys, or `:dynamic` for function
+  tags.
 
   Persistence compatibility checks key the resolved sketch
   configurations by this identity in three places — the current-config
@@ -220,12 +238,30 @@ defmodule Mobius.Events do
   metrics-table dump check. They must all derive the key the same way,
   or valid histogram data gets dropped at load on a false mismatch.
   """
-  @spec config_key(Metrics.normalized_metric_name() | Mobius.metric_name(), [atom()]) ::
-          {Mobius.metric_name(), [atom()]}
+  @spec config_key(Metrics.normalized_metric_name() | Mobius.metric_name(), [atom()] | :dynamic) ::
+          {Mobius.metric_name(), [atom()] | :dynamic}
   def config_key(name, tag_keys) when is_list(name),
     do: config_key(Enum.join(name, "."), tag_keys)
 
+  def config_key(name, :dynamic) when is_binary(name), do: {name, :dynamic}
   def config_key(name, tag_keys) when is_binary(name), do: {name, Enum.sort(tag_keys)}
+
+  @doc """
+  The `config_key/2` under which `configs` holds the configuration for a
+  recorded series: the series' exact tag keys, or the metric's `:dynamic`
+  key when it uses function tags. Falls back to the exact key when neither
+  is present.
+  """
+  @spec series_config_key(map(), Mobius.metric_name(), [atom()]) ::
+          {Mobius.metric_name(), [atom()] | :dynamic}
+  def series_config_key(configs, name, tag_keys) do
+    exact = config_key(name, tag_keys)
+    dynamic = config_key(name, :dynamic)
+
+    if not Map.has_key?(configs, exact) and Map.has_key?(configs, dynamic),
+      do: dynamic,
+      else: exact
+  end
 
   @doc """
   Resolved sketch configuration per histogram-enabled metric definition.
@@ -248,7 +284,7 @@ defmodule Mobius.Events do
           acc
 
         sketch ->
-          Map.put(acc, config_key(metric.name, metric.tags), sketch_config(sketch))
+          Map.put(acc, config_key(metric.name, tag_keys(metric)), sketch_config(sketch))
       end
     end)
   end
@@ -274,6 +310,18 @@ defmodule Mobius.Events do
       fun when is_function(fun, 1) -> fun.(measurements)
       fun when is_function(fun, 2) -> fun.(measurements, metadata)
       key -> measurements[key]
+    end
+  end
+
+  # Function tags (Telemetry.Metrics 1.2+) return the tag map directly and
+  # supersede `:tag_values`.
+  defp extract_tags(%{tags: tags_fun}, metadata) when is_function(tags_fun, 1) do
+    case tags_fun.(metadata) do
+      tags when is_map(tags) ->
+        tags
+
+      other ->
+        raise ArgumentError, "expected the :tags function to return a map, got: #{inspect(other)}"
     end
   end
 

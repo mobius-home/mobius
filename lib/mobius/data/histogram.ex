@@ -124,7 +124,7 @@ defmodule Mobius.Data.Histogram do
       |> Registry.metrics()
       |> Enum.filter(fn m ->
         Enum.join(m.name, ".") == metric_name and
-          Enum.sort(m.tags) == requested_tag_keys
+          Events.tag_keys_match?(Events.tag_keys(m), requested_tag_keys)
       end)
 
     case Enum.find(candidates, &(Events.histogram_opts(&1) != nil)) do
