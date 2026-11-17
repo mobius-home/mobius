@@ -7,7 +7,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > Major version zero (0.y.z) is for initial development. Anything MAY change at
 any time. The public API SHOULD NOT be considered stable.
 
-## Unreleased
+## [v0.8.0] - 2026-11-17
 
 ### Added
 
@@ -36,13 +36,48 @@ any time. The public API SHOULD NOT be considered stable.
   silently skips).
 * `Mobius.Scraper.all_histograms/2` for windowed access to the
   per-snapshot histogram data.
+* `Mobius.Charts`: chart-ready queries, `series/4`, `latest/2`,
+  `distribution/3`, `quantiles_over_time/4` and `list_metrics/1`. Summary
+  series are per interval (the change between consecutive snapshots), not
+  the average since boot.
+* `Mobius.metrics/1`, `Mobius.current/2` and `Mobius.plot/2` for checking
+  a device from IEx: list the tracked metrics, show a metric's latest value
+  (with a bucket histogram for histogram-enabled metrics), and draw a
+  braille line chart with a time axis.
+* `:reports` in calculated summaries: the number of observations in the
+  summary or window.
+* `:scrape_interval` start option, in milliseconds (default and minimum
+  `1_000`). Mobius also scrapes once immediately at boot.
+* `:compression_level` start option (`0..9`, default `9`, `0` disables
+  compression) for the persisted history and event log.
+* `Mobius.DDSketch.bin_estimates/1` to read a sketch's distribution as
+  ordered `{value, count}` bins.
+* "What to measure" and "Histogram configurations" guides.
 
 ### Changed
 
-* RRD format v3 snapshots now carry a `{records, histograms}` tuple,
-  with the histogram bin data kept in its own map. The v2 -> v3
-  migration wraps existing records in the new shape with an empty
-  histogram map, so persisted v2 files keep loading.
+* RRD format v3 stores each metric record as a `{name, type, value, tags}`
+  tuple instead of a map, which cuts history memory by about 40% for a
+  typical instance, and each snapshot carries a `{records, histograms}`
+  tuple with the histogram bin data in its own map. Persisted v2 files are
+  migrated on load. `Mobius.Exports.metrics/4`, the MBF format and the CSV
+  exporter still return maps.
+* Persisted history and the event log are zlib-compressed (see
+  `:compression_level`). Existing uncompressed files still load.
+* Persistence files are written atomically (temporary file, fsync,
+  rename), so a power cut during a save leaves the previous file intact.
+* `Mobius.save/1` waits for the event log to be written and returns event
+  log save errors, instead of returning `:ok` while the write is pending.
+* Scrapes taken before the system clock is synchronized are held back and
+  inserted with the clock-step correction once it syncs, the same
+  correction already applied to events.
+* Query windows: `:to` without `:from` now bounds the window (starting from
+  the beginning of stored history), and queries are no longer capped at 60
+  days of history on instances configured with longer retention.
+* `Mobius.Exports.plot/4` delegates to `Mobius.plot/2` and draws the new
+  braille chart.
+* An invalid `:autosave_interval` logs a warning and disables autosave; it
+  must be a positive integer.
 * Mobius no longer raises at boot. Invalid histogram options disable
   the histogram for that metric (the summary keeps working) with one
   logged warning, and an unusable persistence directory degrades to
@@ -66,9 +101,28 @@ any time. The public API SHOULD NOT be considered stable.
   They were more confusing than helpful and are removed.
   The values are no longer returned from `Mobius.Exports.metrics/4` for the
   `summary` type.
+* The `:serialization_version` option of `Mobius.RRD.save/2`. It always
+  writes the current format; `Mobius.RRD.load/3` still reads older ones.
 
 ### Fixes
 
+* Telemetry handlers are no longer detached for good when a
+  `:measurement`, `:keep` or `:tag_values` callback throws or exits. The
+  error is logged and the metrics keep being recorded.
+* The documented `:measurement_values` and `:group` event options were
+  ignored.
+* Clock-sync adjustment overshot; it now shifts timestamps by the clock
+  step only.
+* Restarting a Mobius instance double-counted events.
+* `Mobius.info/1` crashed on histogram-enabled metrics.
+* Stale metrics restored from disk were not pruned from the registry.
+* A corrupt event log file crashed Mobius at boot.
+* A failed save (e.g. a full disk) leaked a file descriptor, and a failed
+  metrics table save left its temporary file behind.
+* Records landing late in a second could be skipped by queries.
+* CSV export did not quote fields containing commas, quotes or line
+  breaks, and wrote a leading blank line for headerless output.
+* `Mobius.FileError` messages did not include the error reason.
 * Summary `std_dev` for values that are large compared with their spread.
   The variance calculation lost all precision there and returned rounding noise:
   an `ArithmeticError` from `:math.sqrt/1`, `0.0`, or a large wrong value. Integer
@@ -318,6 +372,7 @@ basic maintenance like dependency updates and documentation improvements
 
 Initial release!
 
+[v0.8.0]: https://github.com/mattludwigs/mobius/compare/v0.7.0...v0.8.0
 [v0.7.0]: https://github.com/mattludwigs/mobius/compare/v0.6.1...v0.7.0
 [v0.6.1]: https://github.com/mattludwigs/mobius/compare/v0.6.0...v0.6.1
 [v0.6.0]: https://github.com/mattludwigs/mobius/compare/v0.5.1...v0.6.0
