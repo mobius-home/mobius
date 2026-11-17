@@ -13,7 +13,7 @@ Mobius can scrape irregularly, downsample aggressively, persist occasionally and
 ```elixir
 def deps do
   [
-    {:mobius, "~> 0.6.1"}
+    {:mobius, "~> 0.8.0"}
   ]
 end
 ```
