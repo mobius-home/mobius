@@ -55,12 +55,19 @@ defmodule Mobius.Summary do
 
   defp std_dev(_sum, _sum_sqrd, 1), do: 0.0
 
-  # Naive algorithm. See Wikipedia. Clamp the operand at 0 before sqrt: the
-  # naive sum-of-squares variance can lose precision and go slightly negative
-  # via catastrophic cancellation when float values flow through, which would
-  # make :math.sqrt/1 raise.
+  # Sum-of-squares variance, rearranged as (n·Σx² − (Σx)²) / (n·(n − 1)) so
+  # the cancelling subtraction happens before any division. For integer
+  # measurements (the common case, e.g. `system_time` or native durations)
+  # both terms are exact bignums, so the difference is exact and never
+  # negative. Dividing first, as the textbook form does, rounds (Σx)²/n to a
+  # float and loses the whole spread once the mean is ~10^8 times the
+  # standard deviation, giving 0, a wildly wrong value, or a negative number
+  # that makes :math.sqrt/1 raise.
+  #
+  # Float measurements already lost precision when accumulated, so the
+  # difference can still come out slightly negative; clamp it at 0.
   defp std_dev(sum, sum_sqrd, n) do
-    max(0, (sum_sqrd - sum * sum / n) / (n - 1))
+    max(0, (n * sum_sqrd - sum * sum) / (n * (n - 1)))
     |> :math.sqrt()
   end
 end

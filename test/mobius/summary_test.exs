@@ -53,6 +53,43 @@ defmodule Mobius.SummaryTest do
     assert %{reports: 3} = Summary.calculate(summary_data)
   end
 
+  test "calculate is exact for large, closely spaced integer measurements" do
+    summary_data =
+      1_788_878_897_448
+      |> Summary.new()
+      |> Summary.update(1_788_878_897_449)
+      |> Summary.update(1_788_878_897_450)
+
+    assert %{average: 1_788_878_897_449.0, std_dev: 1.0, reports: 3} ==
+             Summary.calculate(summary_data)
+  end
+
+  test "calculate does not report rounding noise as spread" do
+    base = 1_788_878_897_448
+    values = [0, 1000, 0, 1000] |> Enum.map(&(base + &1))
+    [first | rest] = values
+    summary_data = Enum.reduce(rest, Summary.new(first), &Summary.update(&2, &1))
+
+    assert %{std_dev: std_dev} = Summary.calculate(summary_data)
+    assert std_dev == :math.sqrt(1_000_000 / 3)
+  end
+
+  test "calculate is exact for windows produced by subtracting snapshots" do
+    base = 1_788_878_897_448
+    earlier = Enum.reduce(1..9, Summary.new(base), &Summary.update(&2, base + &1))
+    later = Enum.reduce([7, 9], earlier, &Summary.update(&2, base + &1))
+
+    window = %{
+      accumulated: later.accumulated - earlier.accumulated,
+      accumulated_sqrd: later.accumulated_sqrd - earlier.accumulated_sqrd,
+      reports: later.reports - earlier.reports
+    }
+
+    assert %{average: average, std_dev: std_dev, reports: 2} = Summary.calculate(window)
+    assert average == base + 8.0
+    assert std_dev == :math.sqrt(2)
+  end
+
   # The naive sum-of-squares variance can go negative through catastrophic
   # cancellation when large float values flow through, which would make
   # :math.sqrt/1 raise. calculate/1 must clamp the operand at 0. The data
