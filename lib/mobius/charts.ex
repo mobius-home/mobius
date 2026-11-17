@@ -363,14 +363,15 @@ defmodule Mobius.Charts do
   One entry in the list of metrics available to chart.
 
     * `:metric` / `:type` / `:tags` - identity, ready to pass to the other
-      queries (`tags` is the list of configured tag keys)
+      queries (`tags` is the list of configured tag keys, or `:dynamic` when
+      `:tags` is a function and the keys are only known per event)
     * `:histogram?` - whether a `t:distribution/0` is available for this metric
       (true only for summary metrics registered with histograms enabled)
   """
   @type metric_listing() :: %{
           metric: Mobius.metric_name(),
           type: metric_type(),
-          tags: [atom()],
+          tags: [atom()] | :dynamic,
           histogram?: boolean()
         }
 
@@ -393,7 +394,7 @@ defmodule Mobius.Charts do
       %{
         metric: Enum.join(metric.name, "."),
         type: metric_type(metric),
-        tags: metric.tags,
+        tags: Events.tag_keys(metric),
         histogram?: Events.histogram_opts(metric) != nil
       }
     end)

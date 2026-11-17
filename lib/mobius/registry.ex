@@ -3,7 +3,7 @@ defmodule Mobius.Registry do
 
   use GenServer
 
-  alias Mobius.MetricsTable
+  alias Mobius.{Events, MetricsTable}
   alias Telemetry.Metrics
 
   @typedoc """
@@ -113,7 +113,7 @@ defmodule Mobius.Registry do
   @impl GenServer
   def handle_continue(:update_metrics_table, state) do
     metric_specs =
-      Enum.map(state.metrics, &{&1.name, metric_as_type(&1), Enum.sort(&1.tags)})
+      Enum.map(state.metrics, &{&1.name, metric_as_type(&1), Events.tag_keys(&1)})
 
     state.table
     |> MetricsTable.get_entries()
@@ -130,9 +130,15 @@ defmodule Mobius.Registry do
     # the configured metrics) use atom lists, so parse the name back before
     # comparing and removing.
     name = parse_event_name(metric_name)
-    entry_spec = {name, metric_type, meta |> Map.keys() |> Enum.sort()}
+    tag_keys = Map.keys(meta)
 
-    if !Enum.member?(metric_specs, entry_spec) do
+    configured? =
+      Enum.any?(metric_specs, fn {spec_name, spec_type, spec_tag_keys} ->
+        spec_name == name and spec_type == metric_type and
+          Events.tag_keys_match?(spec_tag_keys, tag_keys)
+      end)
+
+    if !configured? do
       MetricsTable.remove(table, name, metric_type, meta)
     end
   end

@@ -56,4 +56,22 @@ defmodule Mobius.RegistryTest do
              table
            )
   end
+
+  test "keeps restored entries for configured metrics with function tags" do
+    table = :registry_fn_tags_prune_test
+    MetricsTable.init(mobius_instance: table, persistence_dir: "/does/not/matter/here")
+
+    :ok = MetricsTable.put(table, [:fn, :tags, :value], :last_value, 1, %{route: "/a"})
+    :ok = MetricsTable.put(table, [:fn, :tags, :value], :last_value, 2, %{route: "/b", code: 200})
+
+    metrics = [Metrics.last_value("fn.tags.value", tags: &Map.take(&1, [:route, :code]))]
+
+    start_supervised!({Registry, mobius_instance: table, metrics: metrics})
+
+    assert ^metrics = Registry.metrics(table)
+
+    entries = MetricsTable.get_entries(table)
+    assert {"fn.tags.value", :last_value, 1, %{route: "/a"}} in entries
+    assert {"fn.tags.value", :last_value, 2, %{route: "/b", code: 200}} in entries
+  end
 end

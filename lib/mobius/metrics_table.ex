@@ -122,7 +122,7 @@ defmodule Mobius.MetricsTable do
     dropped =
       Enum.reduce(keys, MapSet.new(), fn
         {name, type, meta} = key, dropped when elem(type, 0) == :hist ->
-          config_key = Events.config_key(name, Map.keys(meta))
+          config_key = Events.series_config_key(current_configs, name, Map.keys(meta))
           current = Map.get(current_configs, config_key)
 
           if current != nil and Map.get(persisted_configs, config_key) == current do
